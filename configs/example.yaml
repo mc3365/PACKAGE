@@ -1,0 +1,25 @@
+# Example PACKAGE configuration.
+# Copy this to your own config and edit the paths.
+#
+# Run: PACKAGE build --config configs/example.yaml --platform ont
+
+output_dir: /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/h5
+output_file: fiber_database.h5
+
+samples:
+  - name: d0
+    input_dir: /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/d0
+    ft_extract: d0_fibers.bed.gz
+    modkit_extract: d0_raw_mods.tsv.gz
+
+  - name: d4
+    input_dir: /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/d4
+    ft_extract: d4_fibers.bed.gz
+    modkit_extract: d4_raw_mods.tsv.gz
+
+annotations:
+  master_v3: /vast/palmer/scratch/zsmith/mc3365/long_read/annotations/master_v3.bed
+
+parameters:
+  methylation_threshold: 0.5
+  min_msp_size: 10

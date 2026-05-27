@@ -1,0 +1,128 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "PACKAGE"
+version = "0.1.0"
+description = "Single-molecule epigenomic analysis for long-read Fiber-seq data (ONT and PacBio)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Erika Cui", email = "meiying.cui@yale.edu" },
+]
+keywords = [
+    "fiber-seq",
+    "long-read-sequencing",
+    "epigenomics",
+    "single-molecule",
+    "nucleosome",
+    "dna-methylation",
+    "chromatin-accessibility",
+    "oxford-nanopore",
+    "pacbio",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+]
+
+# Runtime dependencies. Keep this list minimal — every dep is a maintenance liability.
+# Versions pinned to known-good lower bounds; we'll tighten as needed.
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "h5py>=3.8",
+    "intervaltree>=3.1",
+    "tqdm>=4.65",
+    "pyyaml>=6.0",
+    "pydantic>=2.0",      # for typed config
+    "click>=8.1",          # for CLI
+]
+
+[project.optional-dependencies]
+# Development extras: install via `pip install -e ".[dev]"`
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.1.0",         # linter + formatter, replaces black+flake8+isort
+    "mypy>=1.5",
+]
+docs = [
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.4",
+    "mkdocstrings[python]>=0.24",
+]
+# Jupyter notebook examples
+notebooks = [
+    "jupyter>=1.0",
+    "matplotlib>=3.7",
+    "seaborn>=0.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/YOUR_USERNAME/PACKAGE"
+Repository = "https://github.com/YOUR_USERNAME/PACKAGE"
+Issues = "https://github.com/YOUR_USERNAME/PACKAGE/issues"
+Documentation = "https://YOUR_USERNAME.github.io/PACKAGE"
+
+# CLI entry point: after `pip install`, users can type `PACKAGE` in the terminal.
+[project.scripts]
+PACKAGE = "PACKAGE.cli:cli"
+
+# Tell setuptools to look in src/ for the package.
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+PACKAGE = ["py.typed"]   # marks the package as type-annotated for mypy users
+
+# ---------------------------------------------------------------------------
+# Tool configuration
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = [
+    "-ra",                  # short summary of all non-passing tests
+    "--strict-markers",
+    "--strict-config",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort (import sorting)
+    "B",    # bugbear (common bug patterns)
+    "UP",   # pyupgrade (modern Python idioms)
+]
+ignore = [
+    "E501",  # line too long — handled by formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]    # tests can use `assert`
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+# Start permissive — tighten over time as the codebase matures.
+disallow_untyped_defs = false
+ignore_missing_imports = true  # h5py, intervaltree, etc. don't ship stubs

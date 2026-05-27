@@ -1,0 +1,35 @@
+site_name: PACKAGE
+site_description: Single-molecule epigenomic analysis for long-read Fiber-seq data
+repo_url: https://github.com/YOUR_USERNAME/PACKAGE
+repo_name: YOUR_USERNAME/PACKAGE
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Tutorial: tutorial.md
+  - API Reference: api.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite

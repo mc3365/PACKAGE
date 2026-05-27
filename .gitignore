@@ -1,0 +1,79 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Testing & coverage ----
+.coverage
+.coverage.*
+.pytest_cache/
+.tox/
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ---- IDE / editor ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# ---- Bioinformatics data files ----
+# Never commit large data. If you need example data, put it in tests/data/
+# and keep it under ~100KB.
+*.bam
+*.bai
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.h5
+*.hdf5
+!tests/data/*.h5      # exception: tiny test fixtures are OK
+
+# ---- Logs ----
+*.log
+*.out
+*.err
+slurm-*.out
+slurm-*.err
+build_db_*.out
+build_db_*.err
+
+# ---- Index files generated at runtime ----
+*.index.pkl
+
+# ---- Documentation build ----
+docs/site/
+docs/_build/
