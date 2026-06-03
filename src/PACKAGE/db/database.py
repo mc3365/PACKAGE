@@ -406,8 +406,75 @@ class FiberDatabase:
         return r.decode() if r else None
 
     # ==================================================================
-    # ANNOTATIONS + BULK QUERIES (Batch 3 - to come)
+    # ANNOTATIONS (Batch 3)
     # ==================================================================
+
+    def get_annotation_regions(
+        self, annotation_name: str
+    ) -> list[tuple[str, int, int]]:
+        """Return all regions for a given annotation type as (chrom, start, end) tuples.
+
+        Args:
+            annotation_name: Annotation type prefix, e.g. "Typical_Enhancer", "CGI".
+
+        Returns:
+            List of (chrom, start, end) tuples. Empty if the annotation type doesn't
+            exist in this database.
+        """
+        root = self._annotation_features_root()
+        if root is None:
+            return []
+        path = f"{root}/{annotation_name}"
+        if path not in self.db:
+            available = self.list_annotations()
+            log.info(
+                f"Annotation type {annotation_name!r} not found. "
+                f"Available (first 10): {available[:10]}"
+            )
+            return []
+        data = self.db[path][:]
+        return [
+            (r["chr"].decode(), int(r["start"]), int(r["end"])) for r in data
+        ]
+
+    def get_annotation_by_id(
+        self, annotation_id: str
+    ) -> tuple[str, int, int] | None:
+        """Look up a single annotation region by its full ID string.
+
+        Annotation IDs encode the type as the prefix (e.g. "Typical_Enhancer_42"
+        has type "Typical_Enhancer" and numeric suffix "42"). We strip the last
+        underscore-separated token to get the type, then linear-scan that type's
+        feature table for the matching ID.
+
+        Args:
+            annotation_id: Full annotation ID, e.g. "Typical_Enhancer_42".
+
+        Returns:
+            (chrom, start, end) tuple, or None if no match.
+        """
+        # Type = everything before the last underscore-separated token.
+        anno_type = "_".join(annotation_id.split("_")[:-1])
+        root = self._annotation_features_root()
+        if root is None:
+            return None
+        path = f"{root}/{anno_type}"
+        if path not in self.db:
+            return None
+        data = self.db[path][:]
+        if "id" not in data.dtype.names:
+            return None
+        for row in data:
+            if row["id"].decode() == annotation_id:
+                return (row["chr"].decode(), int(row["start"]), int(row["end"]))
+        return None
+
+    # ==================================================================
+    # BULK QUERIES (Batch 3)
+    # ==================================================================
+
+    # Default set of feature types if the caller doesn't specify. Matches V8.
+    _DEFAULT_FEATURE_TYPES: tuple[str, ...] = ("nucleosomes", "5mC")
 
     def query_annotation_fast(
         self,
@@ -416,5 +483,387 @@ class FiberDatabase:
         feature_types: list[str] | None = None,
         max_regions: int | None = None,
     ) -> pd.DataFrame:
-        """TODO: implement in Batch 3."""
-        raise NotImplementedError("Will be added in Batch 3")
+        """Vectorized bulk query: per-fiber stats for each region of an annotation type.
+
+        For each region of the given annotation type, finds all fibers overlapping it
+        and computes per-fiber summary statistics for each requested layer:
+
+        - **nucleosomes**: ``n_nucleosomes``, ``mean_nuc_width``, ``mean_linker``,
+          ``mean_repeat_length``
+        - **5mC**: ``n_cpg``, ``pct_methylated`` (or ``mean_methylation`` if
+          ``is_methylated`` isn't stored)
+        - **5hmC**: ``n_5hmC``, ``pct_hydroxymethylated``
+        - **6mA**: ``n_6mA``
+        - **msp**: ``n_msp``, ``mean_msp_width``
+
+        The "fast" in the name refers to vectorization: each chromosome's data arrays
+        are loaded once, then all regions on that chromosome are processed against
+        them. This is dramatically faster than the per-fiber, per-region nested-loop
+        approach for genome-scale queries.
+
+        Position filters use V8's inclusive ``<=`` semantics (kept for output parity).
+
+        Args:
+            annotation_name: Annotation type prefix (e.g. "CGI", "Typical_Enhancer").
+            sample: Sample to query. Defaults to the first sample.
+            feature_types: Which layers to compute. Defaults to ["nucleosomes", "5mC"].
+            max_regions: If set, only the first N regions are processed (useful for
+                testing).
+
+        Returns:
+            DataFrame with one row per (region, fiber) combination. Empty DataFrame
+            if the annotation type doesn't exist or there are no overlapping fibers.
+        """
+        sample = sample or self.samples[0]
+        feature_types = list(feature_types) if feature_types else list(
+            self._DEFAULT_FEATURE_TYPES
+        )
+
+        regions = self.get_annotation_regions(annotation_name)
+        if not regions:
+            return pd.DataFrame()
+        if max_regions:
+            regions = regions[:max_regions]
+        log.info(
+            f"Bulk query: {len(regions)} {annotation_name!r} regions, "
+            f"sample={sample}, layers={feature_types}"
+        )
+
+        # Group regions by chromosome so we can load each chromosome's arrays once.
+        from collections import defaultdict
+        by_chrom: dict[str, list[tuple[int, int]]] = defaultdict(list)
+        for c, s, e in regions:
+            by_chrom[c].append((s, e))
+
+        results: list[dict[str, Any]] = []
+        for chrom, chrom_regions in by_chrom.items():
+            base = schema.chrom_group_path(sample, chrom)
+            if base not in self.db:
+                continue
+            _, i2s = self._get_id_maps(sample, chrom)
+
+            # Load fiber metadata once for this chromosome.
+            meta = schema.fiber_metadata_path(sample, chrom)
+            fm_ids = self.db[f"{meta}/fiber_int_ids"][:]
+            fm_starts = self.db[f"{meta}/starts"][:]
+            fm_ends = self.db[f"{meta}/ends"][:]
+
+            # Load per-layer data arrays + slice lookups once per chromosome.
+            layer_data, layer_slices = self._load_chrom_layer_data(
+                sample, chrom, feature_types
+            )
+
+            # Process every region against the pre-loaded data.
+            for reg_start, reg_end in chrom_regions:
+                region_id = f"{chrom}:{reg_start}-{reg_end}"
+                overlap_mask = (fm_ends >= reg_start) & (fm_starts <= reg_end)
+
+                for fid_int in fm_ids[overlap_mask]:
+                    rec: dict[str, Any] = {
+                        "region_id": region_id,
+                        "annotation": annotation_name,
+                        "fiber_id": i2s[fid_int].decode(),
+                        "sample": sample,
+                    }
+                    self._compute_per_fiber_stats(
+                        rec, fid_int, reg_start, reg_end,
+                        feature_types, layer_data, layer_slices,
+                    )
+                    results.append(rec)
+
+        log.info(f"Extracted {len(results):,} (fiber, region) records")
+        return pd.DataFrame(results)
+
+    # alias preserved from V8
+    def query_annotation(
+        self,
+        annotation_name: str,
+        sample: str | None = None,
+        feature_types: list[str] | None = None,
+        max_regions: int | None = None,
+    ) -> pd.DataFrame:
+        """Alias of :meth:`query_annotation_fast` for V8 API compatibility."""
+        return self.query_annotation_fast(
+            annotation_name, sample, feature_types, max_regions
+        )
+
+    def _load_chrom_layer_data(
+        self,
+        sample: str,
+        chrom: str,
+        feature_types: list[str],
+    ) -> tuple[dict[str, dict[str, np.ndarray]], dict[str, dict[int, tuple[int, int]]]]:
+        """Load all layer arrays + slice-index dicts for one chromosome.
+
+        Returns:
+            (layer_data, layer_slices) where:
+
+            - layer_data maps layer_name -> {field_name: numpy_array}, only including
+              layers that are both requested AND present in the database.
+            - layer_slices maps layer_name -> {fiber_int_id: (start_row, end_row)},
+              for fast per-fiber row-range lookup.
+        """
+        base = schema.chrom_group_path(sample, chrom)
+        layer_data: dict[str, dict[str, np.ndarray]] = {}
+
+        # Each layer has a different set of fields; the schema's LAYER_FIELDS map
+        # tells us what to load. We only load layers the caller asked for and that
+        # are actually present in the database.
+        for layer in feature_types:
+            if layer not in schema.SUPPORTED_LAYERS:
+                continue
+            layer_grp = f"{base}/{layer}"
+            if layer_grp not in self.db:
+                continue
+            fields_to_load = schema.LAYER_FIELDS[layer]
+            layer_data[layer] = {
+                field: self.db[f"{layer_grp}/{field}"][:]
+                for field in fields_to_load
+                if f"{layer_grp}/{field}" in self.db
+            }
+
+        # Load per-layer slice indices: layer -> {fiber_int_id: (start, end)}.
+        # Doing this as a dict (rather than the structured array) makes per-fiber
+        # lookups O(1) inside the region loop.
+        layer_slices: dict[str, dict[int, tuple[int, int]]] = {}
+        for layer in feature_types:
+            if layer not in schema.SUPPORTED_LAYERS:
+                continue
+            slice_path = schema.slice_index_path(sample, chrom, layer)
+            if slice_path not in self.db:
+                continue
+            idx = self.db[slice_path][:]
+            layer_slices[layer] = {
+                int(row["fiber_int_id"]): (int(row["start"]), int(row["end"]))
+                for row in idx
+            }
+
+        return layer_data, layer_slices
+
+    def _compute_per_fiber_stats(
+        self,
+        rec: dict[str, Any],
+        fid_int: int,
+        reg_start: int,
+        reg_end: int,
+        feature_types: list[str],
+        layer_data: dict[str, dict[str, np.ndarray]],
+        layer_slices: dict[str, dict[int, tuple[int, int]]],
+    ) -> None:
+        """Populate ``rec`` in-place with per-fiber stats for one (fiber, region).
+
+        Each layer has its own field-name conventions in the output record, matching
+        V8 exactly (n_nucleosomes, n_cpg, pct_methylated, etc.) so existing
+        downstream code keeps working.
+
+        Position-filter semantics use V8's inclusive ``<=`` (kept for output parity).
+        """
+        # ---- nucleosomes ----
+        if "nucleosomes" in feature_types and "nucleosomes" in layer_data:
+            sl = layer_slices.get("nucleosomes", {}).get(int(fid_int))
+            if sl:
+                s, e = sl
+                d = layer_data["nucleosomes"]
+                m = (d["starts"][s:e] >= reg_start) & (d["ends"][s:e] <= reg_end)
+                rec["n_nucleosomes"] = int(m.sum())
+                if m.any():
+                    rec["mean_nuc_width"] = float(d["widths"][s:e][m].mean())
+                    lk = d["linkers"][s:e][m]
+                    lk = lk[lk >= 0]  # filter the -1 sentinel for missing linker
+                    if len(lk) > 0:
+                        rec["mean_linker"] = float(lk.mean())
+                        rec["mean_repeat_length"] = (
+                            rec["mean_nuc_width"] + rec["mean_linker"]
+                        )
+            else:
+                rec["n_nucleosomes"] = 0
+
+        # ---- 5mC ----
+        if "5mC" in feature_types and "5mC" in layer_data:
+            sl = layer_slices.get("5mC", {}).get(int(fid_int))
+            if sl:
+                s, e = sl
+                d = layer_data["5mC"]
+                m = (d["positions"][s:e] >= reg_start) & (d["positions"][s:e] <= reg_end)
+                rec["n_cpg"] = int(m.sum())
+                if m.any():
+                    if "is_methylated" in d:
+                        rec["pct_methylated"] = float(
+                            d["is_methylated"][s:e][m].mean() * 100
+                        )
+                    elif "probabilities" in d:
+                        rec["mean_methylation"] = float(
+                            d["probabilities"][s:e][m].mean()
+                        )
+            else:
+                rec["n_cpg"] = 0
+
+        # ---- 5hmC ----
+        if "5hmC" in feature_types and "5hmC" in layer_data:
+            sl = layer_slices.get("5hmC", {}).get(int(fid_int))
+            if sl:
+                s, e = sl
+                d = layer_data["5hmC"]
+                m = (d["positions"][s:e] >= reg_start) & (d["positions"][s:e] <= reg_end)
+                rec["n_5hmC"] = int(m.sum())
+                if m.any() and "is_methylated" in d:
+                    rec["pct_hydroxymethylated"] = float(
+                        d["is_methylated"][s:e][m].mean() * 100
+                    )
+            else:
+                rec["n_5hmC"] = 0
+
+        # ---- 6mA ----
+        if "6mA" in feature_types and "6mA" in layer_data:
+            sl = layer_slices.get("6mA", {}).get(int(fid_int))
+            if sl:
+                s, e = sl
+                d = layer_data["6mA"]
+                m = (d["positions"][s:e] >= reg_start) & (d["positions"][s:e] <= reg_end)
+                rec["n_6mA"] = int(m.sum())
+            else:
+                rec["n_6mA"] = 0
+
+        # ---- msp ----
+        if "msp" in feature_types and "msp" in layer_data:
+            sl = layer_slices.get("msp", {}).get(int(fid_int))
+            if sl:
+                s, e = sl
+                d = layer_data["msp"]
+                m = (d["starts"][s:e] >= reg_start) & (d["ends"][s:e] <= reg_end)
+                rec["n_msp"] = int(m.sum())
+                if m.any():
+                    rec["mean_msp_width"] = float(d["widths"][s:e][m].mean())
+            else:
+                rec["n_msp"] = 0
+
+    def query_by_id(
+        self,
+        region_id: str,
+        sample: str | None = None,
+        feature_types: list[str] | None = None,
+    ) -> pd.DataFrame:
+        """Per-fiber query for a single annotation region, looked up by ID.
+
+        Useful for inspecting one specific region without running a bulk query. Slower
+        than :meth:`query_annotation_fast` per-region but trivial for a single lookup.
+
+        Args:
+            region_id: Annotation ID, e.g. "Typical_Enhancer_42".
+            sample: Sample to query.
+            feature_types: Layers to compute; defaults to all five supported layers.
+
+        Returns:
+            DataFrame with one row per fiber overlapping the region. Empty DataFrame
+            if the region ID isn't found or no fibers overlap.
+        """
+        sample = sample or self.samples[0]
+        region = self.get_annotation_by_id(region_id)
+        if not region:
+            log.info(f"Region {region_id!r} not found")
+            return pd.DataFrame()
+        chrom, start, end = region
+        feature_types = list(feature_types) if feature_types else list(
+            schema.SUPPORTED_LAYERS
+        )
+
+        fibers = self.get_fibers_at(chrom, start, end, sample)
+        if not fibers:
+            return pd.DataFrame()
+
+        results: list[dict[str, Any]] = []
+        for fid in fibers:
+            rec: dict[str, Any] = {
+                "region_id": region_id,
+                "fiber_id": fid,
+                "sample": sample,
+            }
+
+            if "nucleosomes" in feature_types:
+                nucs = self.get_nucleosomes(fid, chrom, sample)
+                if nucs:
+                    m = (nucs["starts"] >= start) & (nucs["ends"] <= end)
+                    rec["n_nucleosomes"] = int(m.sum())
+                    if m.any():
+                        rec["mean_nuc_width"] = float(nucs["widths"][m].mean())
+                else:
+                    rec["n_nucleosomes"] = 0
+
+            if "5mC" in feature_types:
+                mc = self.get_methylation(fid, chrom, "5mC", sample)
+                if mc and len(mc["positions"]) > 0:
+                    m = (mc["positions"] >= start) & (mc["positions"] <= end)
+                    rec["n_cpg"] = int(m.sum())
+                    if m.any() and "is_methylated" in mc:
+                        rec["pct_methylated"] = float(
+                            mc["is_methylated"][m].mean() * 100
+                        )
+                else:
+                    rec["n_cpg"] = 0
+
+            if "6mA" in feature_types:
+                ma = self.get_methylation(fid, chrom, "6mA", sample)
+                if ma and len(ma["positions"]) > 0:
+                    # Note: V8 had a parenthesization bug here that would have
+                    # raised at runtime. Fixed to int(boolean.sum()).
+                    m = (ma["positions"] >= start) & (ma["positions"] <= end)
+                    rec["n_6mA"] = int(m.sum())
+                else:
+                    rec["n_6mA"] = 0
+
+            if "msp" in feature_types:
+                msp = self.get_msp(fid, chrom, sample)
+                if msp and len(msp["starts"]) > 0:
+                    m = (msp["starts"] >= start) & (msp["ends"] <= end)
+                    rec["n_msp"] = int(m.sum())
+                else:
+                    rec["n_msp"] = 0
+
+            results.append(rec)
+
+        return pd.DataFrame(results)
+
+    # ==================================================================
+    # CROSS-SAMPLE COMPARISON (Batch 3)
+    # ==================================================================
+
+    def compare_samples(
+        self,
+        annotation_name: str,
+        feature_types: list[str] | None = None,
+        max_regions: int | None = None,
+    ) -> pd.DataFrame:
+        """Run :meth:`query_annotation_fast` on every sample and concatenate.
+
+        The returned DataFrame has the same per-(region, fiber) row structure as a
+        single-sample query, with the additional ``sample`` column distinguishing
+        which sample each row came from. This is the natural input to a comparison
+        analysis (e.g. d0 vs d4, or ONT vs PacBio).
+
+        Args:
+            annotation_name: Annotation type prefix.
+            feature_types: Layers to compute.
+            max_regions: Optional per-sample region cap.
+
+        Returns:
+            Concatenated DataFrame across all samples in the database. Empty if no
+            sample produced any results.
+        """
+        frames: list[pd.DataFrame] = []
+        for sample in self.samples:
+            log.info(f"--- {sample} ---")
+            df = self.query_annotation_fast(
+                annotation_name,
+                sample=sample,
+                feature_types=feature_types,
+                max_regions=max_regions,
+            )
+            if not df.empty:
+                frames.append(df)
+        if not frames:
+            return pd.DataFrame()
+        combined = pd.concat(frames, ignore_index=True)
+        log.info(
+            f"Combined: {len(combined):,} records across {len(self.samples)} samples"
+        )
+        return combined

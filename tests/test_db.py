@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import h5py
+import pandas as pd
 import pytest
 
 from PACKAGE.db import FiberDatabase
@@ -263,3 +264,161 @@ def test_find_fiber_chromosome_returns_chrom(tiny_db_path_with_layers):
 def test_find_fiber_chromosome_unknown_returns_none(tiny_db_path_with_layers):
     with FiberDatabase(tiny_db_path_with_layers) as db:
         assert db._find_fiber_chromosome("nonexistent_fiber", sample="d0") is None
+
+
+# ===========================================================================
+# Batch 3 tests: annotations + bulk queries + cross-sample
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# get_annotation_regions / get_annotation_by_id
+# ---------------------------------------------------------------------------
+def test_get_annotation_regions_returns_tuples(tiny_db_path_with_layers):
+    """get_annotation_regions returns (chrom, start, end) tuples for the type."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        regions = db.get_annotation_regions("Typical_Enhancer")
+    assert regions == [("chr1", 400, 700), ("chr1", 4900, 5500)]
+
+
+def test_get_annotation_regions_unknown_returns_empty(tiny_db_path_with_layers):
+    """Unknown annotation type should return []."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        regions = db.get_annotation_regions("Compartment_B")  # not in fixture
+    assert regions == []
+
+
+def test_get_annotation_by_id_returns_region(tiny_db_path_with_layers):
+    """get_annotation_by_id strips trailing _N and finds by full ID."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        region = db.get_annotation_by_id("Typical_Enhancer_1")
+    assert region == ("chr1", 400, 700)
+
+
+def test_get_annotation_by_id_missing_returns_none(tiny_db_path_with_layers):
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        assert db.get_annotation_by_id("Typical_Enhancer_999") is None
+
+
+# ---------------------------------------------------------------------------
+# query_annotation_fast — the workhorse
+# ---------------------------------------------------------------------------
+def test_query_annotation_fast_returns_dataframe(tiny_db_path_with_layers):
+    """Basic shape check: produces a DataFrame with expected columns."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        df = db.query_annotation_fast("Typical_Enhancer", sample="d0")
+    assert isinstance(df, pd.DataFrame)
+    assert not df.empty
+    # Universal columns
+    for col in ("region_id", "annotation", "fiber_id", "sample"):
+        assert col in df.columns
+    # Layer-specific columns (default is nucleosomes + 5mC)
+    assert "n_nucleosomes" in df.columns
+    assert "n_cpg" in df.columns
+
+
+def test_query_annotation_fast_n_nucleosomes_correct(tiny_db_path_with_layers):
+    """For Typical_Enhancer_1 region [400, 700), fiber1 has 2 nucleosomes fully inside.
+
+    Fiber1 has nucleosomes at starts=[150, 350, 550] ends=[300, 500, 700].
+    Within [400, 700) using V8's inclusive ``<=`` semantics:
+      - n1 [150, 300]: start<400 → excluded
+      - n2 [350, 500]: start>=400? No, 350<400 → excluded
+      - n3 [550, 700]: start=550>=400 and end=700<=700 → included
+    So fiber1 has 1 nucleosome in this region.
+    """
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        df = db.query_annotation_fast(
+            "Typical_Enhancer", sample="d0", feature_types=["nucleosomes"]
+        )
+    # Get the row for fiber1 at the first enhancer (region_id = "chr1:400-700")
+    row = df[(df["fiber_id"] == "fiber1") & (df["region_id"] == "chr1:400-700")]
+    assert len(row) == 1
+    assert int(row["n_nucleosomes"].iloc[0]) == 1
+
+
+def test_query_annotation_fast_pct_methylated_correct(tiny_db_path_with_layers):
+    """In region [150, 850) (CGI), fiber1 has 4 CpGs: [200, 400, 600, 800].
+
+    is_methylated values are [1, 0, 1, 0]. All four fall inside.
+    Expected pct_methylated = (1+0+1+0)/4 * 100 = 50.0.
+    """
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        df = db.query_annotation_fast(
+            "CGI", sample="d0", feature_types=["5mC"]
+        )
+    row = df[df["fiber_id"] == "fiber1"]
+    assert len(row) == 1
+    assert int(row["n_cpg"].iloc[0]) == 4
+    assert row["pct_methylated"].iloc[0] == 50.0
+
+
+def test_query_annotation_fast_max_regions_caps_output(tiny_db_path_with_layers):
+    """max_regions=1 should only process the first region."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        df_all = db.query_annotation_fast("Typical_Enhancer", sample="d0")
+        df_capped = db.query_annotation_fast(
+            "Typical_Enhancer", sample="d0", max_regions=1
+        )
+    # The capped version should have fewer rows (only Typical_Enhancer_1's results).
+    assert df_capped["region_id"].nunique() == 1
+    assert df_all["region_id"].nunique() == 2
+
+
+def test_query_annotation_fast_unknown_annotation_returns_empty(
+    tiny_db_path_with_layers,
+):
+    """Unknown annotation type yields an empty DataFrame, not an error."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        df = db.query_annotation_fast("Nonexistent_Type", sample="d0")
+    assert df.empty
+
+
+def test_query_annotation_alias_matches_fast(tiny_db_path_with_layers):
+    """V8 had query_annotation as alias for query_annotation_fast; we preserve."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        df1 = db.query_annotation_fast("CGI", sample="d0")
+        df2 = db.query_annotation("CGI", sample="d0")
+    pd.testing.assert_frame_equal(df1, df2)
+
+
+# ---------------------------------------------------------------------------
+# query_by_id — single-region path
+# ---------------------------------------------------------------------------
+def test_query_by_id_returns_dataframe(tiny_db_path_with_layers):
+    """query_by_id for a known annotation should produce a DataFrame."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        df = db.query_by_id("CGI_1", sample="d0")
+    assert isinstance(df, pd.DataFrame)
+    assert not df.empty
+    assert df["region_id"].iloc[0] == "CGI_1"
+
+
+def test_query_by_id_unknown_returns_empty(tiny_db_path_with_layers):
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        df = db.query_by_id("NonexistentID_999", sample="d0")
+    assert df.empty
+
+
+# ---------------------------------------------------------------------------
+# compare_samples
+# ---------------------------------------------------------------------------
+def test_compare_samples_single_sample_matches_query(tiny_db_path_with_layers):
+    """With one sample, compare_samples should equal query_annotation_fast."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        df_compare = db.compare_samples("CGI")
+        df_query = db.query_annotation_fast("CGI", sample="d0")
+    # compare_samples adds sample column at the end of pd.concat; reset_index for cmp.
+    pd.testing.assert_frame_equal(
+        df_compare.reset_index(drop=True), df_query.reset_index(drop=True)
+    )
+
+
+def test_compare_samples_empty_db_returns_empty(tmp_path):
+    """Database with no annotations should produce empty result, not crash."""
+    import h5py
+    db_path = tmp_path / "empty_anno.h5"
+    with h5py.File(db_path, "w") as f:
+        f.create_group("d0")
+    with FiberDatabase(db_path) as db:
+        df = db.compare_samples("CGI")
+    assert df.empty

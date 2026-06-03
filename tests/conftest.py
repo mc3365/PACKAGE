@@ -154,4 +154,20 @@ def tiny_db_path_with_layers(tmp_path: Path) -> Path:
                 layer_grp.create_dataset(field, data=arr)
             indices.create_dataset(f"{layer_name}_slices", data=slices)
 
+        # Annotation features: two annotation types.
+        # Region [400, 700) overlaps fiber1's middle features but not fiber2.
+        # Region [4900, 5500) overlaps fiber2's MSPs and some methylation.
+        anno_dtype = [("chr", "S10"), ("start", np.uint32),
+                      ("end", np.uint32), ("id", "S50")]
+        enhancer_data = np.array([
+            (b"chr1", 400, 700, b"Typical_Enhancer_1"),
+            (b"chr1", 4900, 5500, b"Typical_Enhancer_2"),
+        ], dtype=anno_dtype)
+        cgi_data = np.array([
+            (b"chr1", 150, 850, b"CGI_1"),
+        ], dtype=anno_dtype)
+        anno_features = f.create_group("annotations/master/features")
+        anno_features.create_dataset("Typical_Enhancer", data=enhancer_data)
+        anno_features.create_dataset("CGI", data=cgi_data)
+
     return db_path
