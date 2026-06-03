@@ -133,3 +133,133 @@ def test_internal_id_map_missing_fiber_returns_none(tiny_db_path):
     """_str_to_int returns None for a fiber not present on the chromosome."""
     with FiberDatabase(tiny_db_path) as db:
         assert db._str_to_int("not_a_real_fiber", "d0", "chr1") is None
+
+
+# ===========================================================================
+# Batch 2 tests: per-fiber data accessors
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# get_fibers_at — coordinate queries
+# ---------------------------------------------------------------------------
+def test_get_fibers_at_finds_overlapping_fibers(tiny_db_path_with_layers):
+    """A region inside fiber1's span should return fiber1."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        fibers = db.get_fibers_at("chr1", 500, 1500, sample="d0")
+    assert fibers == ["fiber1"]
+
+
+def test_get_fibers_at_returns_multiple(tiny_db_path_with_layers):
+    """A region spanning both fibers should return both."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        fibers = db.get_fibers_at("chr1", 0, 10_000, sample="d0")
+    assert set(fibers) == {"fiber1", "fiber2"}
+
+
+def test_get_fibers_at_returns_empty_for_no_overlap(tiny_db_path_with_layers):
+    """A region with no fibers should return []."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        fibers = db.get_fibers_at("chr1", 3000, 4000, sample="d0")
+    assert fibers == []
+
+
+def test_get_fibers_at_strict_half_open_boundary(tiny_db_path_with_layers):
+    """Region [end, end+N) should NOT include a fiber that ends at exactly `end`.
+
+    fiber1 spans [100, 2100). A query for [2100, 3000) should return no fibers —
+    fiber1's end coincides with the query start, no overlap. This is the half-open
+    overlap semantics we agreed on (different from V8's inclusive comparison).
+    """
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        fibers = db.get_fibers_at("chr1", 2100, 3000, sample="d0")
+    assert fibers == []
+
+
+def test_get_fibers_at_missing_chromosome(tiny_db_path_with_layers):
+    """Querying a chromosome with no data should return []."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        fibers = db.get_fibers_at("chrZ", 0, 1000, sample="d0")
+    assert fibers == []
+
+
+# ---------------------------------------------------------------------------
+# get_nucleosomes
+# ---------------------------------------------------------------------------
+def test_get_nucleosomes_returns_arrays(tiny_db_path_with_layers):
+    """fiber1 has 3 nucleosomes in the fixture; check we get them all."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        nucs = db.get_nucleosomes("fiber1", "chr1", sample="d0")
+    assert set(nucs.keys()) == {"starts", "ends", "widths", "linkers"}
+    assert len(nucs["starts"]) == 3
+    assert list(nucs["starts"]) == [150, 350, 550]
+    assert list(nucs["widths"]) == [150, 150, 150]
+
+
+def test_get_nucleosomes_unknown_fiber_returns_empty(tiny_db_path_with_layers):
+    """Fiber not in the chromosome should return an empty dict, not error."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        nucs = db.get_nucleosomes("nonexistent_fiber", "chr1", sample="d0")
+    assert nucs == {}
+
+
+# ---------------------------------------------------------------------------
+# get_methylation
+# ---------------------------------------------------------------------------
+def test_get_methylation_returns_all_fields(tiny_db_path_with_layers):
+    """5mC fixture has positions, probabilities, is_methylated; we should get all."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        meth = db.get_methylation("fiber1", "chr1", mod_type="5mC", sample="d0")
+    assert set(meth.keys()) == {"positions", "probabilities", "is_methylated"}
+    assert len(meth["positions"]) == 4
+    assert list(meth["positions"]) == [200, 400, 600, 800]
+    assert list(meth["is_methylated"]) == [1, 0, 1, 0]
+
+
+def test_get_methylation_missing_mod_type_returns_empty(tiny_db_path_with_layers):
+    """6mA is not stored in this fixture; should get an empty dict."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        meth = db.get_methylation("fiber1", "chr1", mod_type="6mA", sample="d0")
+    assert meth == {}
+
+
+def test_get_methylation_rejects_invalid_mod_type(tiny_db_path_with_layers):
+    """An unknown mod_type should raise ValueError from schema.layer_path."""
+    # The slice-index path lookup will raise before we even check the data path.
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        with pytest.raises(ValueError, match="Unknown layer"):
+            db.get_methylation("fiber1", "chr1", mod_type="not_a_real_mod", sample="d0")
+
+
+# ---------------------------------------------------------------------------
+# get_msp
+# ---------------------------------------------------------------------------
+def test_get_msp_returns_arrays(tiny_db_path_with_layers):
+    """fiber1 has 2 MSPs in the fixture."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        msp = db.get_msp("fiber1", "chr1", sample="d0")
+    assert set(msp.keys()) == {"starts", "ends", "widths"}
+    assert len(msp["starts"]) == 2
+    assert list(msp["starts"]) == [100, 600]
+
+
+def test_get_msp_fiber_with_no_msps_returns_empty(tiny_db_path_with_layers):
+    """A fiber not in the MSP slice index should get an empty dict."""
+    # fiber1 and fiber2 both have MSPs in this fixture; query a fiber that doesn't exist.
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        msp = db.get_msp("nonexistent_fiber", "chr1", sample="d0")
+    assert msp == {}
+
+
+# ---------------------------------------------------------------------------
+# _find_fiber_chromosome
+# ---------------------------------------------------------------------------
+def test_find_fiber_chromosome_returns_chrom(tiny_db_path_with_layers):
+    """_find_fiber_chromosome looks up a fiber's chromosome from fiber_lookup."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        chrom = db._find_fiber_chromosome("fiber1", sample="d0")
+    assert chrom == "chr1"
+
+
+def test_find_fiber_chromosome_unknown_returns_none(tiny_db_path_with_layers):
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        assert db._find_fiber_chromosome("nonexistent_fiber", sample="d0") is None

@@ -2,9 +2,12 @@
 
 Fixtures defined here are auto-discovered by pytest — no import needed in test files.
 
-Currently provides a tiny synthetic HDF5 database for testing the query layer without
-needing real Fiber-seq data on disk. When the refactor lands, expand this fixture to
-include realistic minimum data so analysis tests can run end-to-end.
+This file provides synthetic HDF5 databases for testing the query layer without
+needing real Fiber-seq data on disk. As batches land, the fixtures grow:
+
+  - ``tiny_db_path``: minimal (Batch 1) — metadata + fiber_metadata only
+  - ``tiny_db_path_with_layers``: tiny_db_path PLUS layer data (Batch 2) —
+    nucleosomes, 5mC, msp populated for 2 fibers on chr1
 """
 
 from __future__ import annotations
@@ -18,37 +21,137 @@ import pytest
 
 @pytest.fixture
 def tiny_db_path(tmp_path: Path) -> Path:
-    """Build a minimal PACKAGE-shaped HDF5 file in a per-test tmpdir.
+    """Minimal PACKAGE-shaped HDF5 in a per-test tmpdir.
 
-    Currently contains just the top-level structure + metadata, enough to verify
-    FiberDatabase opens correctly. Expand as the refactor adds more methods that
-    need testing.
+    Contains top-level metadata and one (sample, chromosome) with fiber_metadata
+    for 2 fibers. No modification layers. Used by Batch 1 tests.
     """
     db_path = tmp_path / "tiny.h5"
     with h5py.File(db_path, "w") as f:
-        # Metadata
         meta = f.create_group("metadata")
         meta.attrs["version"] = "8.0"
         meta.attrs["genome_version"] = "mm10"
         meta.attrs["methylation_threshold"] = 0.5
 
-        # One sample with one chromosome and a few fibers (fake but schema-compliant)
         sample = f.create_group("d0")
-
-        # fiber_lookup
         lookup = sample.create_group("fiber_lookup")
-        lookup.create_dataset("fiber_ids", data=np.array([b"fiber1", b"fiber2"], dtype="S20"))
-        lookup.create_dataset("chromosomes", data=np.array([b"chr1", b"chr1"], dtype="S10"))
+        lookup.create_dataset(
+            "fiber_ids", data=np.array([b"fiber1", b"fiber2"], dtype="S20")
+        )
+        lookup.create_dataset(
+            "chromosomes", data=np.array([b"chr1", b"chr1"], dtype="S10")
+        )
 
-        # chr1 group with required subgroups
         chrom = sample.create_group("chr1")
         chrom.create_dataset(
             "fiber_id_table", data=np.array([b"fiber1", b"fiber2"], dtype="S20")
         )
-
         fm = chrom.create_group("fiber_metadata")
         fm.create_dataset("fiber_int_ids", data=np.array([0, 1], dtype=np.uint32))
         fm.create_dataset("starts", data=np.array([100, 5000], dtype=np.uint32))
         fm.create_dataset("ends", data=np.array([2100, 8000], dtype=np.uint32))
+
+    return db_path
+
+
+# ---------------------------------------------------------------------------
+# Layer-populated fixture for Batch 2
+# ---------------------------------------------------------------------------
+
+# Define the data layout once so the fixture is easy to read. Each fiber gets:
+#  - a set of nucleosome intervals (starts, ends, widths, linkers)
+#  - a set of 5mC calls (positions, probabilities, is_methylated)
+#  - a set of MSP intervals (starts, ends, widths)
+#
+# Slice indices encode the row range per fiber within each layer's data arrays.
+
+_NUC_DATA = {
+    # fiber0: 3 nucleosomes at rows [0:3]; fiber1: 2 nucleosomes at rows [3:5]
+    "fiber_int_ids": np.array([0, 0, 0, 1, 1], dtype=np.uint32),
+    "starts":        np.array([150, 350, 550, 5100, 5300], dtype=np.uint32),
+    "ends":          np.array([300, 500, 700, 5250, 5450], dtype=np.uint32),
+    "widths":        np.array([150, 150, 150, 150, 150], dtype=np.uint32),
+    "linkers":       np.array([-1, 50, 50, -1, 50], dtype=np.int32),
+}
+_NUC_SLICES = np.array(
+    [(0, 0, 3), (1, 3, 5)],
+    dtype=[("fiber_int_id", np.uint32), ("start", np.uint32), ("end", np.uint32)],
+)
+
+_M5C_DATA = {
+    # fiber0: 4 CpGs at rows [0:4]; fiber1: 2 CpGs at rows [4:6]
+    "fiber_int_ids":  np.array([0, 0, 0, 0, 1, 1], dtype=np.uint32),
+    "positions":      np.array([200, 400, 600, 800, 5200, 5400], dtype=np.uint32),
+    "probabilities":  np.array([0.9, 0.1, 0.8, 0.2, 0.95, 0.3], dtype=np.float32),
+    "is_methylated":  np.array([1, 0, 1, 0, 1, 0], dtype=np.uint8),
+}
+_M5C_SLICES = np.array(
+    [(0, 0, 4), (1, 4, 6)],
+    dtype=[("fiber_int_id", np.uint32), ("start", np.uint32), ("end", np.uint32)],
+)
+
+_MSP_DATA = {
+    # fiber0: 2 MSPs at rows [0:2]; fiber1: 1 MSP at rows [2:3]
+    "fiber_int_ids": np.array([0, 0, 1], dtype=np.uint32),
+    "starts":        np.array([100, 600, 5100], dtype=np.uint32),
+    "ends":          np.array([200, 750, 5400], dtype=np.uint32),
+    "widths":        np.array([100, 150, 300], dtype=np.uint32),
+}
+_MSP_SLICES = np.array(
+    [(0, 0, 2), (1, 2, 3)],
+    dtype=[("fiber_int_id", np.uint32), ("start", np.uint32), ("end", np.uint32)],
+)
+
+
+@pytest.fixture
+def tiny_db_path_with_layers(tmp_path: Path) -> Path:
+    """PACKAGE-shaped HDF5 with all the structure Batch 2 methods need.
+
+    Two fibers on chr1:
+      - fiber1 (int_id=0): spans [100, 2100), has 3 nucleosomes, 4 5mC calls, 2 MSPs
+      - fiber2 (int_id=1): spans [5000, 8000), has 2 nucleosomes, 2 5mC calls, 1 MSP
+
+    Positions chosen so a region query like [400, 700) selects only fiber1's middle
+    features, exercising the per-fiber slice logic.
+    """
+    db_path = tmp_path / "tiny_layers.h5"
+    with h5py.File(db_path, "w") as f:
+        # Top-level metadata
+        meta = f.create_group("metadata")
+        meta.attrs["version"] = "8.0"
+        meta.attrs["genome_version"] = "mm10"
+        meta.attrs["methylation_threshold"] = 0.5
+
+        # Sample + fiber_lookup
+        sample = f.create_group("d0")
+        lookup = sample.create_group("fiber_lookup")
+        lookup.create_dataset(
+            "fiber_ids", data=np.array([b"fiber1", b"fiber2"], dtype="S20")
+        )
+        lookup.create_dataset(
+            "chromosomes", data=np.array([b"chr1", b"chr1"], dtype="S10")
+        )
+
+        # chr1 group
+        chrom = sample.create_group("chr1")
+        chrom.create_dataset(
+            "fiber_id_table", data=np.array([b"fiber1", b"fiber2"], dtype="S20")
+        )
+        fm = chrom.create_group("fiber_metadata")
+        fm.create_dataset("fiber_int_ids", data=np.array([0, 1], dtype=np.uint32))
+        fm.create_dataset("starts", data=np.array([100, 5000], dtype=np.uint32))
+        fm.create_dataset("ends", data=np.array([2100, 8000], dtype=np.uint32))
+
+        # Layer data + slice indices
+        indices = chrom.create_group("_indices")
+        for layer_name, layer_data, slices in [
+            ("nucleosomes", _NUC_DATA, _NUC_SLICES),
+            ("5mC",         _M5C_DATA, _M5C_SLICES),
+            ("msp",         _MSP_DATA, _MSP_SLICES),
+        ]:
+            layer_grp = chrom.create_group(layer_name)
+            for field, arr in layer_data.items():
+                layer_grp.create_dataset(field, data=arr)
+            indices.create_dataset(f"{layer_name}_slices", data=slices)
 
     return db_path

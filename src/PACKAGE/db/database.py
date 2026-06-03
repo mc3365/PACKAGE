@@ -224,23 +224,111 @@ class FiberDatabase:
             summary[f"n_fibers_{sample}"] = self._count_fibers(sample)
         return summary
 
-    # ------------------------------------------------------------------
-    # Query methods (Batch 2 / Batch 3 — to be added in subsequent commits)
-    # ------------------------------------------------------------------
+    # ==================================================================
+    # COORDINATE QUERIES (Batch 2)
+    # ==================================================================
+
     def get_fibers_at(
-        self, chrom: str, start: int, end: int, sample: str | None = None
+        self,
+        chrom: str,
+        start: int,
+        end: int,
+        sample: str | None = None,
     ) -> list[str]:
         """Return fiber IDs (as strings) overlapping ``[start, end)`` on ``chrom``.
 
-        TODO: implement in Batch 2.
+        Uses the spatial index if available, otherwise falls back to a vectorized
+        array scan over the fiber_metadata starts/ends arrays. Both code paths use
+        strict half-open overlap semantics: a fiber overlaps the region iff its
+        interval ``[fiber_start, fiber_end)`` and the query interval ``[start, end)``
+        have nonempty intersection.
+
+        Args:
+            chrom: Chromosome name (e.g. "chr1").
+            start: Region start (0-based, inclusive).
+            end: Region end (0-based, exclusive).
+            sample: Sample to query. Defaults to the first sample in the database.
+
+        Returns:
+            List of fiber UUID strings (may be empty). Order is not guaranteed.
         """
-        raise NotImplementedError("Will be added in Batch 2")
+        sample = sample or self.samples[0]
+
+        # Fast path: use the spatial index when present.
+        if sample in self._spatial_index and chrom in self._spatial_index[sample]:
+            int_ids = [
+                iv.data
+                for iv in self._spatial_index[sample][chrom].overlap(start, end)
+            ]
+            _, i2s = self._get_id_maps(sample, chrom)
+            return [i2s[iid].decode() for iid in int_ids]
+
+        # Fallback: array scan. Returns [] if the chromosome's metadata is absent.
+        meta_path = schema.fiber_metadata_path(sample, chrom)
+        starts_path = f"{meta_path}/starts"
+        if starts_path not in self.db:
+            return []
+        starts = self.db[starts_path][:]
+        ends = self.db[f"{meta_path}/ends"][:]
+        fids = self.db[f"{meta_path}/fiber_int_ids"][:]
+        # Strict half-open overlap: fiber.end > region.start AND fiber.start < region.end.
+        # (V8 used >= / <= which differs on boundary-touching cases; we match the
+        #  IntervalTree semantics here so both code paths agree.)
+        mask = (ends > start) & (starts < end)
+        _, i2s = self._get_id_maps(sample, chrom)
+        return [i2s[iid].decode() for iid in fids[mask]]
+
+    # ==================================================================
+    # PER-FIBER DATA ACCESS (Batch 2)
+    # ==================================================================
+
+    def _get_fiber_slice(
+        self, fiber_id: str, chrom: str, sample: str, layer: str
+    ) -> tuple[int, int] | None:
+        """Return ``(start, end)`` row indices for one fiber in one layer's arrays.
+
+        Uses the per-layer slice index stored at ``<sample>/<chrom>/_indices/<layer>_slices``.
+        Returns None if any of:
+
+          - the layer is not stored for this chromosome
+          - the fiber is not present on this chromosome
+          - the fiber has no rows in this layer (e.g. no nucleosomes called)
+        """
+        slice_path = schema.slice_index_path(sample, chrom, layer)
+        if slice_path not in self.db:
+            return None
+        int_id = self._str_to_int(fiber_id, sample, chrom)
+        if int_id is None:
+            return None
+        idx = self.db[slice_path][:]
+        mask = idx["fiber_int_id"] == int_id
+        if not mask.any():
+            return None
+        row = idx[mask][0]
+        return (int(row["start"]), int(row["end"]))
 
     def get_nucleosomes(
         self, fiber_id: str, chrom: str, sample: str | None = None
-    ) -> dict[str, Any]:
-        """TODO: implement in Batch 2."""
-        raise NotImplementedError("Will be added in Batch 2")
+    ) -> dict[str, np.ndarray]:
+        """Return one fiber's nucleosomes on one chromosome.
+
+        Returns:
+            Dict with keys 'starts', 'ends', 'widths', 'linkers' — each a numpy
+            array of the same length. Empty dict if the fiber is not present or
+            has no nucleosomes called.
+        """
+        sample = sample or self.samples[0]
+        sl = self._get_fiber_slice(fiber_id, chrom, sample, "nucleosomes")
+        if sl is None:
+            return {}
+        s, e = sl
+        base = schema.layer_path(sample, chrom, "nucleosomes")
+        return {
+            "starts":  self.db[f"{base}/starts"][s:e],
+            "ends":    self.db[f"{base}/ends"][s:e],
+            "widths":  self.db[f"{base}/widths"][s:e],
+            "linkers": self.db[f"{base}/linkers"][s:e],
+        }
 
     def get_methylation(
         self,
@@ -248,15 +336,78 @@ class FiberDatabase:
         chrom: str,
         mod_type: str = "5mC",
         sample: str | None = None,
-    ) -> dict[str, Any]:
-        """TODO: implement in Batch 2."""
-        raise NotImplementedError("Will be added in Batch 2")
+    ) -> dict[str, np.ndarray]:
+        """Return one fiber's modification calls of a given type.
+
+        Works for 5mC, 5hmC, and 6mA. The returned dict always contains 'positions';
+        for 5mC/5hmC it also contains 'probabilities' and 'is_methylated' if those
+        are stored. 6mA has no per-call probability in our schema.
+
+        Args:
+            fiber_id: UUID string.
+            chrom: Chromosome name.
+            mod_type: One of "5mC", "5hmC", "6mA".
+            sample: Sample name; defaults to the first sample.
+
+        Returns:
+            Dict of numpy arrays. Empty if the layer is missing or the fiber has
+            no calls of this type.
+        """
+        sample = sample or self.samples[0]
+        sl = self._get_fiber_slice(fiber_id, chrom, sample, mod_type)
+        if sl is None:
+            return {}
+        s, e = sl
+        base = schema.layer_path(sample, chrom, mod_type)
+        result: dict[str, np.ndarray] = {
+            "positions": self.db[f"{base}/positions"][s:e],
+        }
+        if f"{base}/probabilities" in self.db:
+            result["probabilities"] = self.db[f"{base}/probabilities"][s:e]
+        if f"{base}/is_methylated" in self.db:
+            result["is_methylated"] = self.db[f"{base}/is_methylated"][s:e]
+        return result
 
     def get_msp(
         self, fiber_id: str, chrom: str, sample: str | None = None
-    ) -> dict[str, Any]:
-        """TODO: implement in Batch 2."""
-        raise NotImplementedError("Will be added in Batch 2")
+    ) -> dict[str, np.ndarray]:
+        """Return one fiber's MSP (methylation-sensitive patch) intervals.
+
+        Returns:
+            Dict with keys 'starts', 'ends', 'widths'. Empty if the fiber has no
+            MSPs or MSPs aren't stored for this chromosome.
+        """
+        sample = sample or self.samples[0]
+        sl = self._get_fiber_slice(fiber_id, chrom, sample, "msp")
+        if sl is None:
+            return {}
+        s, e = sl
+        base = schema.layer_path(sample, chrom, "msp")
+        return {
+            "starts": self.db[f"{base}/starts"][s:e],
+            "ends":   self.db[f"{base}/ends"][s:e],
+            "widths": self.db[f"{base}/widths"][s:e],
+        }
+
+    def _find_fiber_chromosome(
+        self, fiber_id: str, sample: str | None = None
+    ) -> str | None:
+        """Look up which chromosome a fiber lives on (from the per-sample fiber_lookup).
+
+        Cached lazily. Returns None if the fiber isn't found in this sample.
+        """
+        sample = sample or self.samples[0]
+        if sample not in self._fiber_lookup_cache:
+            lookup = schema.fiber_lookup_path(sample)
+            fids = self.db[f"{lookup}/fiber_ids"][:]
+            chroms = self.db[f"{lookup}/chromosomes"][:]
+            self._fiber_lookup_cache[sample] = dict(zip(fids, chroms, strict=False))
+        r = self._fiber_lookup_cache[sample].get(fiber_id.encode())
+        return r.decode() if r else None
+
+    # ==================================================================
+    # ANNOTATIONS + BULK QUERIES (Batch 3 - to come)
+    # ==================================================================
 
     def query_annotation_fast(
         self,
