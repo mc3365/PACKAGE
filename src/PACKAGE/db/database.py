@@ -53,6 +53,17 @@ class FiberDatabase:
         ``.index.pkl`` file. If False, attempt to load an existing sidecar.
     """
 
+    # ------------------------------------------------------------------
+    # Class-level constants
+    # ------------------------------------------------------------------
+    MAX_FIBER_SPAN: int = 100_000
+    """Fibers with ``end - start > MAX_FIBER_SPAN`` are treated as artifacts and
+    excluded from all overlap queries. 100 kb is the V8 default; it filters out
+    rare misaligned reads whose reported span is much larger than any plausible
+    biological fiber. Filtering happens at the query layer, not the storage
+    layer — the underlying HDF5 retains all fibers.
+    """
+
     def __init__(self, db_path: str | Path, build_index: bool = False) -> None:
         self.db_path = Path(db_path)
         if not self.db_path.exists():
@@ -99,7 +110,8 @@ class FiberDatabase:
 
             for sample in self.samples:
                 self._spatial_index[sample] = build_for_sample(
-                    self.db, sample, self._get_id_maps
+                    self.db, sample, self._get_id_maps,
+                    max_fiber_span=self.MAX_FIBER_SPAN,
                 )
             save_index(self._spatial_index, index_path)
             log.info(f"Spatial index saved to {index_path}")
@@ -243,6 +255,9 @@ class FiberDatabase:
         interval ``[fiber_start, fiber_end)`` and the query interval ``[start, end)``
         have nonempty intersection.
 
+        Fibers whose reported span exceeds :attr:`MAX_FIBER_SPAN` are excluded
+        from results (likely alignment artifacts).
+
         Args:
             chrom: Chromosome name (e.g. "chr1").
             start: Region start (0-based, inclusive).
@@ -255,6 +270,8 @@ class FiberDatabase:
         sample = sample or self.samples[0]
 
         # Fast path: use the spatial index when present.
+        # The index was built with monster fibers already excluded (see spatial_index.py),
+        # so we don't need to filter again here.
         if sample in self._spatial_index and chrom in self._spatial_index[sample]:
             int_ids = [
                 iv.data
@@ -271,6 +288,10 @@ class FiberDatabase:
         starts = self.db[starts_path][:]
         ends = self.db[f"{meta_path}/ends"][:]
         fids = self.db[f"{meta_path}/fiber_int_ids"][:]
+        # Filter monster fibers (artifact entries with implausibly large spans).
+        spans = ends - starts
+        valid = spans <= self.MAX_FIBER_SPAN
+        starts, ends, fids = starts[valid], ends[valid], fids[valid]
         # Strict half-open overlap: fiber.end > region.start AND fiber.start < region.end.
         # (V8 used >= / <= which differs on boundary-touching cases; we match the
         #  IntervalTree semantics here so both code paths agree.)
@@ -406,6 +427,171 @@ class FiberDatabase:
         return r.decode() if r else None
 
     # ==================================================================
+    # BULK CHROMOSOME ACCESS (Batch 3 — load once, reuse for many regions)
+    # ==================================================================
+    # These methods support a workflow where a user wants to write their own
+    # per-region loop without going through query_annotation_fast. Call
+    # load_chromosome_data() once per chromosome, then use the returned dict
+    # with get_overlapping_fiber_ids / get_spanning_fiber_ids for fast,
+    # numpy-only overlap selection.
+
+    def load_chromosome_data(
+        self,
+        sample: str,
+        chrom: str,
+        layers: list[str] | None = None,
+    ) -> dict[str, Any] | None:
+        """Load all arrays for one chromosome into memory.
+
+        Call once per chromosome, then reuse for many region queries via
+        :meth:`get_overlapping_fiber_ids` / :meth:`get_spanning_fiber_ids`.
+        Monster fibers (span > :attr:`MAX_FIBER_SPAN`) are excluded automatically
+        from the fiber metadata arrays — but NOT from per-layer arrays, so
+        per-fiber lookups by integer ID still work.
+
+        Args:
+            sample: Sample name.
+            chrom: Chromosome name.
+            layers: Layers to load. Default: ``["nucleosomes"]``. Pass
+                ``["nucleosomes", "5mC", "5hmC", "6mA", "msp"]`` to load all.
+
+        Returns:
+            A dict with these top-level keys:
+
+            - ``fm_ids``, ``fm_starts``, ``fm_ends``: filtered fiber metadata arrays
+            - ``id_table``: the raw fiber_id_table (uint32 -> UUID bytestring)
+            - ``<layer>``: ``{field: ndarray}`` for each loaded layer
+            - ``<layer>_idx``: ``{fiber_int_id: (start_row, end_row)}`` slice lookup
+
+            Returns ``None`` if the chromosome isn't in the database.
+        """
+        base = schema.chrom_group_path(sample, chrom)
+        if base not in self.db:
+            return None
+
+        cd: dict[str, Any] = {}
+
+        # Fiber metadata (will be filtered).
+        meta = schema.fiber_metadata_path(sample, chrom)
+        cd["fm_ids"] = self.db[f"{meta}/fiber_int_ids"][:]
+        cd["fm_starts"] = self.db[f"{meta}/starts"][:]
+        cd["fm_ends"] = self.db[f"{meta}/ends"][:]
+
+        # Filter monster fibers and log how many were dropped.
+        spans = cd["fm_ends"] - cd["fm_starts"]
+        valid = spans <= self.MAX_FIBER_SPAN
+        n_excluded = int((~valid).sum())
+        if n_excluded > 0:
+            n_before = len(cd["fm_ids"])
+            cd["fm_ids"] = cd["fm_ids"][valid]
+            cd["fm_starts"] = cd["fm_starts"][valid]
+            cd["fm_ends"] = cd["fm_ends"][valid]
+            log.info(
+                f"  {chrom}: excluded {n_excluded:,}/{n_before:,} monster fibers "
+                f"(>{self.MAX_FIBER_SPAN/1000:.0f} kb)"
+            )
+
+        # ID lookup table (unfiltered — needed to translate any int ID to UUID).
+        cd["id_table"] = self.db[schema.fiber_id_table_path(sample, chrom)][:]
+
+        layers = list(layers) if layers else ["nucleosomes"]
+        for layer in layers:
+            layer_grp = schema.layer_path(sample, chrom, layer)
+            if layer_grp not in self.db:
+                continue
+            lg = self.db[layer_grp]
+            ld: dict[str, Any] = {}
+            ld["fiber_int_ids"] = lg["fiber_int_ids"][:]
+
+            if layer == "nucleosomes":
+                ld["starts"] = lg["starts"][:]
+                ld["ends"] = lg["ends"][:]
+                ld["widths"] = lg["widths"][:]
+                ld["linkers"] = lg["linkers"][:]
+            elif layer in ("5mC", "5hmC"):
+                ld["positions"] = lg["positions"][:]
+                if "is_methylated" in lg:
+                    ld["is_methylated"] = lg["is_methylated"][:]
+                if "probabilities" in lg:
+                    ld["probabilities"] = lg["probabilities"][:]
+            elif layer == "6mA":
+                ld["positions"] = lg["positions"][:]
+            elif layer == "msp":
+                ld["starts"] = lg["starts"][:]
+                ld["ends"] = lg["ends"][:]
+                ld["widths"] = lg["widths"][:]
+
+            cd[layer] = ld
+
+            # Slice index: fiber_int_id -> (start_idx, end_idx).
+            idx_path = schema.slice_index_path(sample, chrom, layer)
+            if idx_path in self.db:
+                idx = self.db[idx_path][:]
+                cd[f"{layer}_idx"] = {
+                    int(row["fiber_int_id"]): (int(row["start"]), int(row["end"]))
+                    for row in idx
+                }
+            else:
+                cd[f"{layer}_idx"] = {}
+
+        return cd
+
+    @staticmethod
+    def get_overlapping_fiber_ids(
+        chrom_data: dict[str, Any], start: int, end: int
+    ) -> np.ndarray:
+        """Return fiber int IDs whose span overlaps ``[start, end)`` (V8 semantics).
+
+        Pure numpy — no HDF5 I/O. Use after :meth:`load_chromosome_data`.
+
+        Uses V8's inclusive overlap (``fm_ends >= start`` AND ``fm_starts <= end``)
+        for output parity with :meth:`query_annotation_fast`.
+        """
+        mask = (
+            (chrom_data["fm_ends"] >= start)
+            & (chrom_data["fm_starts"] <= end)
+        )
+        return chrom_data["fm_ids"][mask]
+
+    @staticmethod
+    def get_spanning_fiber_ids(
+        chrom_data: dict[str, Any],
+        start: int,
+        end: int,
+        min_coverage: float = 0.8,
+    ) -> np.ndarray:
+        """Return fiber int IDs that cover at least ``min_coverage`` of ``[start, end)``.
+
+        Pure numpy — no HDF5 I/O. Use after :meth:`load_chromosome_data`.
+        Useful for analyses that need fibers spanning most of a regulatory region
+        rather than barely touching it.
+
+        Args:
+            chrom_data: Output of :meth:`load_chromosome_data`.
+            start, end: Region bounds (0-based, half-open).
+            min_coverage: Minimum fraction of region length the fiber must cover.
+
+        Returns:
+            uint32 array of fiber int IDs.
+        """
+        reg_len = end - start
+        if reg_len <= 0:
+            return np.array([], dtype=np.uint32)
+        mask = (
+            (chrom_data["fm_ends"] >= start)
+            & (chrom_data["fm_starts"] <= end)
+        )
+        if not mask.any():
+            return np.array([], dtype=np.uint32)
+        fids = chrom_data["fm_ids"][mask]
+        starts = chrom_data["fm_starts"][mask]
+        ends = chrom_data["fm_ends"][mask]
+        overlap_start = np.maximum(starts, start)
+        overlap_end = np.minimum(ends, end)
+        coverage = np.maximum(overlap_end - overlap_start, 0) / reg_len
+        return fids[coverage >= min_coverage]
+
+    # ==================================================================
     # ANNOTATIONS (Batch 3)
     # ==================================================================
 
@@ -468,6 +654,60 @@ class FiberDatabase:
             if row["id"].decode() == annotation_id:
                 return (row["chr"].decode(), int(row["start"]), int(row["end"]))
         return None
+
+    def get_annotation_regions_with_ids(
+        self, annotation_name: str
+    ) -> list[tuple[str, int, int, str]]:
+        """Same as :meth:`get_annotation_regions` but also returns each region's ID.
+
+        Useful when downstream analyses need to refer back to specific annotation
+        entries by their full ID (e.g. ``"Typical_Enhancer_42"``).
+
+        Args:
+            annotation_name: Annotation type prefix.
+
+        Returns:
+            List of ``(chrom, start, end, unique_id)`` tuples. Empty if the
+            annotation type doesn't exist in this database.
+        """
+        root = self._annotation_features_root()
+        if root is None:
+            return []
+        path = f"{root}/{annotation_name}"
+        if path not in self.db:
+            available = self.list_annotations()
+            log.info(
+                f"Annotation type {annotation_name!r} not found. "
+                f"Available (first 10): {available[:10]}"
+            )
+            return []
+        data = self.db[path][:]
+        regions = []
+        for row in data:
+            if "id" in data.dtype.names:
+                uid = row["id"].decode()
+            else:
+                uid = f"{annotation_name}_{len(regions)}"
+            regions.append(
+                (row["chr"].decode(), int(row["start"]), int(row["end"]), uid)
+            )
+        return regions
+
+    @staticmethod
+    def group_regions_by_chrom(
+        regions: list[tuple[str, int, int, str]],
+    ) -> dict[str, list[tuple[int, int, str]]]:
+        """Group ``(chr, start, end, id)`` tuples by chromosome.
+
+        Helper for users building their own per-chromosome loops on top of
+        :meth:`load_chromosome_data`.
+        """
+        from collections import defaultdict
+
+        by_chrom: dict[str, list[tuple[int, int, str]]] = defaultdict(list)
+        for chrom, start, end, uid in regions:
+            by_chrom[chrom].append((start, end, uid))
+        return dict(by_chrom)
 
     # ==================================================================
     # BULK QUERIES (Batch 3)
@@ -547,6 +787,10 @@ class FiberDatabase:
             fm_ids = self.db[f"{meta}/fiber_int_ids"][:]
             fm_starts = self.db[f"{meta}/starts"][:]
             fm_ends = self.db[f"{meta}/ends"][:]
+            # Filter monster fibers (artifact entries with implausibly large spans).
+            spans = fm_ends - fm_starts
+            valid = spans <= self.MAX_FIBER_SPAN
+            fm_ids, fm_starts, fm_ends = fm_ids[valid], fm_starts[valid], fm_ends[valid]
 
             # Load per-layer data arrays + slice lookups once per chromosome.
             layer_data, layer_slices = self._load_chrom_layer_data(

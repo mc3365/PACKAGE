@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import h5py
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -422,3 +423,143 @@ def test_compare_samples_empty_db_returns_empty(tmp_path):
     with FiberDatabase(db_path) as db:
         df = db.compare_samples("CGI")
     assert df.empty
+
+
+# ===========================================================================
+# MAX_FIBER_SPAN — monster-fiber filter
+# ===========================================================================
+def test_max_fiber_span_excludes_monsters_from_array_scan(tiny_db_with_monster_fiber):
+    """Array-scan fallback should drop fibers whose span > MAX_FIBER_SPAN."""
+    with FiberDatabase(tiny_db_with_monster_fiber) as db:
+        # No spatial index built -> uses array scan
+        fibers = db.get_fibers_at("chr1", 1000, 2000, sample="d0")
+    # fiber_monster overlaps [1000, 2000) trivially but should be filtered out;
+    # fiber_normal_a [100, 2100) overlaps and is kept; fiber_normal_b [5000, 8000) doesn't.
+    assert set(fibers) == {"fiber_normal_a"}
+
+
+def test_max_fiber_span_excludes_monsters_from_bulk_query(tiny_db_with_monster_fiber):
+    """query_annotation_fast should filter monster fibers before building records."""
+    # Need an annotation to query. Add one to the file in-place.
+    import h5py
+    anno_dtype = [("chr", "S10"), ("start", np.uint32),
+                  ("end", np.uint32), ("id", "S50")]
+    with h5py.File(tiny_db_with_monster_fiber, "a") as f:
+        anno_data = np.array(
+            [(b"chr1", 1000, 2000, b"TestRegion_1")],
+            dtype=anno_dtype,
+        )
+        anno_grp = f.create_group("annotations/master/features")
+        anno_grp.create_dataset("TestRegion", data=anno_data)
+
+    with FiberDatabase(tiny_db_with_monster_fiber) as db:
+        df = db.query_annotation_fast("TestRegion", sample="d0")
+    # Should have exactly one row: fiber_normal_a.
+    assert len(df) == 1
+    assert df.iloc[0]["fiber_id"] == "fiber_normal_a"
+
+
+def test_max_fiber_span_class_attribute_documented():
+    """MAX_FIBER_SPAN exists as a class attribute with expected default value."""
+    assert FiberDatabase.MAX_FIBER_SPAN == 100_000
+
+
+# ===========================================================================
+# load_chromosome_data + helpers
+# ===========================================================================
+def test_load_chromosome_data_returns_expected_keys(tiny_db_path_with_layers):
+    """load_chromosome_data returns fiber metadata plus requested layer data."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        cd = db.load_chromosome_data("d0", "chr1", layers=["nucleosomes", "5mC"])
+    assert cd is not None
+    # Universal keys
+    assert set(["fm_ids", "fm_starts", "fm_ends", "id_table"]).issubset(cd.keys())
+    # Per-layer keys
+    assert "nucleosomes" in cd
+    assert "nucleosomes_idx" in cd
+    assert "5mC" in cd
+    assert "5mC_idx" in cd
+    # Layer-specific fields
+    assert set(["starts", "ends", "widths", "linkers", "fiber_int_ids"]).issubset(
+        cd["nucleosomes"].keys()
+    )
+
+
+def test_load_chromosome_data_unknown_chrom_returns_none(tiny_db_path_with_layers):
+    """load_chromosome_data returns None for a chromosome that isn't stored."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        assert db.load_chromosome_data("d0", "chrZ") is None
+
+
+def test_load_chromosome_data_excludes_monster_fibers(tiny_db_with_monster_fiber):
+    """The fm_ids returned by load_chromosome_data should not include monsters."""
+    with FiberDatabase(tiny_db_with_monster_fiber) as db:
+        cd = db.load_chromosome_data("d0", "chr1", layers=[])
+    # 3 fibers in the file, 1 is a monster -> 2 should survive
+    assert len(cd["fm_ids"]) == 2
+    assert 1 not in cd["fm_ids"].tolist()  # fiber_monster had int_id=1
+
+
+def test_get_overlapping_fiber_ids(tiny_db_path_with_layers):
+    """Static helper should find overlapping fibers from pre-loaded chrom data."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        cd = db.load_chromosome_data("d0", "chr1", layers=[])
+    # Region inside fiber1 [100, 2100) only.
+    ids = FiberDatabase.get_overlapping_fiber_ids(cd, 500, 1500)
+    assert set(ids.tolist()) == {0}
+    # Region spanning both fibers.
+    ids = FiberDatabase.get_overlapping_fiber_ids(cd, 0, 10_000)
+    assert set(ids.tolist()) == {0, 1}
+
+
+def test_get_spanning_fiber_ids_coverage_threshold(tiny_db_path_with_layers):
+    """get_spanning_fiber_ids should respect min_coverage parameter."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        cd = db.load_chromosome_data("d0", "chr1", layers=[])
+    # fiber1 spans [100, 2100) — 2000 bp wide.
+    # Region [500, 1500) is 1000 bp; fiber1 fully covers it -> coverage = 1.0.
+    ids = FiberDatabase.get_spanning_fiber_ids(cd, 500, 1500, min_coverage=0.8)
+    assert set(ids.tolist()) == {0}
+    # Region [500, 100_000) is 99_500 bp; fiber1 only covers (2100-500)=1600 bp -> coverage ~1.6%.
+    ids = FiberDatabase.get_spanning_fiber_ids(cd, 500, 100_000, min_coverage=0.8)
+    assert len(ids) == 0
+
+
+def test_get_spanning_fiber_ids_empty_region(tiny_db_path_with_layers):
+    """A zero-or-negative-length region should return an empty array."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        cd = db.load_chromosome_data("d0", "chr1", layers=[])
+    ids = FiberDatabase.get_spanning_fiber_ids(cd, 1000, 1000)
+    assert len(ids) == 0
+
+
+# ===========================================================================
+# get_annotation_regions_with_ids + group_regions_by_chrom
+# ===========================================================================
+def test_get_annotation_regions_with_ids(tiny_db_path_with_layers):
+    """Should return 4-tuples including each region's full ID string."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        regions = db.get_annotation_regions_with_ids("Typical_Enhancer")
+    assert regions == [
+        ("chr1", 400, 700, "Typical_Enhancer_1"),
+        ("chr1", 4900, 5500, "Typical_Enhancer_2"),
+    ]
+
+
+def test_get_annotation_regions_with_ids_unknown(tiny_db_path_with_layers):
+    """Unknown type should yield empty list."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        assert db.get_annotation_regions_with_ids("Compartment_B") == []
+
+
+def test_group_regions_by_chrom_pure_function():
+    """group_regions_by_chrom organizes 4-tuples by chromosome."""
+    regions = [
+        ("chr1", 100, 200, "id_a"),
+        ("chr2", 50, 75, "id_b"),
+        ("chr1", 1000, 1500, "id_c"),
+    ]
+    grouped = FiberDatabase.group_regions_by_chrom(regions)
+    assert set(grouped.keys()) == {"chr1", "chr2"}
+    assert grouped["chr1"] == [(100, 200, "id_a"), (1000, 1500, "id_c")]
+    assert grouped["chr2"] == [(50, 75, "id_b")]

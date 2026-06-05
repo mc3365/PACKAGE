@@ -171,3 +171,47 @@ def tiny_db_path_with_layers(tmp_path: Path) -> Path:
         anno_features.create_dataset("CGI", data=cgi_data)
 
     return db_path
+
+
+@pytest.fixture
+def tiny_db_with_monster_fiber(tmp_path: Path) -> Path:
+    """A db with 2 normal fibers + 1 monster fiber (span > 100 kb).
+
+    Used to verify FiberDatabase.MAX_FIBER_SPAN filtering across all overlap
+    code paths (spatial index, array scan, bulk query).
+
+    Layout:
+      - fiber_normal_a: int_id=0, spans [100, 2100)        — normal, 2 kb
+      - fiber_monster:  int_id=1, spans [500, 500_000_000)  — monster, way too large
+      - fiber_normal_b: int_id=2, spans [5000, 8000)       — normal, 3 kb
+
+    A region query for [1000, 2000) should match only fiber_normal_a, NOT the
+    monster (even though the monster's span trivially overlaps everything).
+    """
+    db_path = tmp_path / "tiny_with_monster.h5"
+    with h5py.File(db_path, "w") as f:
+        meta = f.create_group("metadata")
+        meta.attrs["version"] = "8.0"
+        meta.attrs["genome_version"] = "mm10"
+
+        sample = f.create_group("d0")
+        lookup = sample.create_group("fiber_lookup")
+        lookup.create_dataset(
+            "fiber_ids",
+            data=np.array([b"fiber_normal_a", b"fiber_monster", b"fiber_normal_b"], dtype="S30"),
+        )
+        lookup.create_dataset(
+            "chromosomes", data=np.array([b"chr1", b"chr1", b"chr1"], dtype="S10")
+        )
+
+        chrom = sample.create_group("chr1")
+        chrom.create_dataset(
+            "fiber_id_table",
+            data=np.array([b"fiber_normal_a", b"fiber_monster", b"fiber_normal_b"], dtype="S30"),
+        )
+        fm = chrom.create_group("fiber_metadata")
+        fm.create_dataset("fiber_int_ids", data=np.array([0, 1, 2], dtype=np.uint32))
+        fm.create_dataset("starts", data=np.array([100, 500, 5000], dtype=np.uint32))
+        fm.create_dataset("ends",   data=np.array([2100, 500_000_000, 8000], dtype=np.uint32))
+
+    return db_path
