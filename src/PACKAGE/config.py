@@ -6,27 +6,31 @@ Configuration is loaded from a YAML file rather than hardcoded in scripts. This 
   - Type validation at load time, not at use time
   - Clear separation of "what to run" from "how to run it"
 
-Example YAML:
+Example YAML
+============
 
-    # config.yaml
-    output_dir: /vast/palmer/scratch/zsmith/mc3365/long_read/h5
+    output_dir: /path/to/output
     output_file: fiber_database.h5
+    reference: /path/to/mm10/genome.fa
+
     samples:
-      - name: d0
-        input_dir: /path/to/d0
-        ft_extract: d0.fibers.bed.gz
-        modkit_extract: d0.mods.tsv.gz
-      - name: d4
-        input_dir: /path/to/d4
-        ft_extract: d4.fibers.bed.gz
-        modkit_extract: d4.mods.tsv.gz
+      - name: esc_2i_d0
+        bam: /path/to/d0.fiberseq.bam          # for the extract phase
+        layers:
+          nucleosomes: /path/to/d0_nuc_features.csv      # REQUIRED for build
+          "5mC":       /path/to/d0_raw_mods.tsv.gz       # optional
+          "5hmC":      /path/to/d0_raw_mods.tsv.gz       # SAME FILE as 5mC
+          "6mA":       /path/to/d0_6ma.bed
+          msp:         /path/to/d0_msp.bed
+
     annotations:
-      master_v3: /path/to/master_annotations_v3.bed
+      master: /path/to/master_annotations_v3.bed
+
     parameters:
       methylation_threshold: 0.5
       min_msp_size: 10
 
-Load with:
+Load with::
 
     from PACKAGE.config import load_config
     cfg = load_config("config.yaml")
@@ -37,30 +41,67 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# Layer names recognized by the config layer. Mirrors PACKAGE.db.schema.SUPPORTED_LAYERS
+# but defined here to avoid a circular import (the config is used before the schema is
+# loaded in some import orders).
+_VALID_LAYER_NAMES: frozenset[str] = frozenset(
+    {"nucleosomes", "5mC", "5hmC", "6mA", "msp"}
+)
 
 
 class SampleConfig(BaseModel):
-    """One sample's input file locations."""
+    """One sample's input files for the build phase.
 
-    name: str = Field(description="Sample name used as HDF5 group key (e.g. 'd0', 'd4').")
-    input_dir: Path = Field(description="Directory containing this sample's input files.")
-    ft_extract: str = Field(description="Filename of ft-extract output (BED12).")
-    modkit_extract: str | None = Field(
+    Per-layer file paths are explicit so users with non-standard naming conventions
+    are not constrained. Only ``nucleosomes`` is required (it defines which fibers
+    exist on which chromosomes); other layers are optional and skipped if absent
+    from ``layers``.
+    """
+
+    model_config = ConfigDict(extra="forbid")  # catch typos in YAML keys
+
+    name: str = Field(description="Sample name (becomes the HDF5 top-level group name).")
+    bam: Path | None = Field(
         default=None,
-        description="Filename of modkit extract output (ONT only).",
+        description="Path to the fiberseq-annotated BAM (used by the extract phase).",
     )
-    # Add additional per-sample fields here as needed (e.g. pb_cpg_tools output for PacBio).
+    layers: dict[str, Path] = Field(
+        description=(
+            "Per-layer file paths. 'nucleosomes' is required; other layers "
+            "(5mC, 5hmC, 6mA, msp) are optional and skipped if absent."
+        ),
+    )
+
+    @field_validator("layers")
+    @classmethod
+    def _check_layer_names_and_nucleosomes(cls, v: dict[str, Path]) -> dict[str, Path]:
+        unknown = set(v.keys()) - _VALID_LAYER_NAMES
+        if unknown:
+            raise ValueError(
+                f"Unknown layer name(s) {sorted(unknown)} in sample.layers. "
+                f"Valid: {sorted(_VALID_LAYER_NAMES)}."
+            )
+        if "nucleosomes" not in v:
+            raise ValueError(
+                "Sample must include a 'nucleosomes' layer (it defines which fibers "
+                "exist on each chromosome). Even if you only care about other "
+                "modifications, the nucleosomes file is required."
+            )
+        return v
 
 
 class ParametersConfig(BaseModel):
     """Numerical parameters affecting database construction."""
 
+    model_config = ConfigDict(extra="forbid")
+
     methylation_threshold: float = Field(
         default=0.5,
         ge=0.0,
         le=1.0,
-        description="Probability ≥ threshold → methylated (binary call).",
+        description="Per-CpG probability ≥ threshold → methylated (binary call).",
     )
     min_msp_size: int = Field(
         default=10,
@@ -72,15 +113,24 @@ class ParametersConfig(BaseModel):
 class Config(BaseModel):
     """Top-level PACKAGE configuration."""
 
+    model_config = ConfigDict(extra="forbid")
+
     output_dir: Path = Field(description="Where to write the HDF5 database.")
     output_file: str = Field(
         default="fiber_database.h5",
         description="Filename for the output HDF5 database.",
     )
+    reference: Path | None = Field(
+        default=None,
+        description="Path to the reference genome FASTA (used by extract phase).",
+    )
     samples: list[SampleConfig] = Field(description="One entry per sample.")
     annotations: dict[str, Path] = Field(
         default_factory=dict,
-        description="Mapping of annotation-set name → path to BED/TSV file.",
+        description=(
+            "Mapping of annotation-set name → path to BED4 file. "
+            "Currently 'master' is the only recognized name."
+        ),
     )
     parameters: ParametersConfig = Field(default_factory=ParametersConfig)
 
@@ -91,8 +141,15 @@ class Config(BaseModel):
 
     @property
     def sample_names(self) -> list[str]:
-        """Convenience: list of sample names in order."""
+        """Convenience: list of sample names in declaration order."""
         return [s.name for s in self.samples]
+
+    def get_sample(self, name: str) -> SampleConfig:
+        """Look up a sample's config by name. Raises KeyError if not found."""
+        for s in self.samples:
+            if s.name == name:
+                return s
+        raise KeyError(f"Sample {name!r} not in config (have: {self.sample_names}).")
 
 
 def load_config(path: str | Path) -> Config:
