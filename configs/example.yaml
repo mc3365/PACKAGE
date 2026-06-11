@@ -3,11 +3,11 @@
 #
 # Run: PACKAGE build --config configs/example.yaml
 
-output_dir: /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/h5
+output_dir: /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/h5
 output_file: fiber_database_PACKAGE.h5
 
 # Reference genome (used by the extract phase, not by build).
-reference: /gpfs/gibbs/data/genomes/Mus_musculus/UCSC/mm10/Sequence/BWAIndex/genome.fa
+reference: /nfs/roberts/project/pi_zs296/mc3365/database/genome/genome.fa
 
 # Per-sample input files. Each layer's path is explicit; only `nucleosomes` is
 # required for build. Other layers (5mC, 5hmC, 6mA, msp) are optional and
@@ -17,26 +17,26 @@ reference: /gpfs/gibbs/data/genomes/Mus_musculus/UCSC/mm10/Sequence/BWAIndex/gen
 # `mod_code` column 'm' vs 'h'). Use the same path for both.
 samples:
   - name: d0
-    bam: /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/esc_2i_d0.output.fiberseq.bam
+    bam: /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/esc_2i_d0.output.fiberseq.bam
     layers:
-      nucleosomes: /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/modification/d0_nuc_features.csv
-      "5mC":       /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/modification/esc_2i_d0_raw_mods.tsv.gz
-      "5hmC":      /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/modification/esc_2i_d0_raw_mods.tsv.gz
-      "6mA":       /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/esc_2i_d0_6ma.bed
-      msp:         /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/esc_2i_d0_msp.bed
+      nucleosomes: /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/modification/d0_nuc_features.csv
+      "5mC":       /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/modification/esc_2i_d0_raw_mods.tsv.gz
+      "5hmC":      /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/modification/esc_2i_d0_raw_mods.tsv.gz
+      "6mA":       /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/esc_2i_d0_6ma.bed
+      msp:         /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/esc_2i_d0_msp.bed
 
   - name: d4
-    bam: /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/esc_2i_d4.output.fiberseq.bam
+    bam: /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/esc_2i_d4.output.fiberseq.bam
     layers:
-      nucleosomes: /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/modification/d4_nuc_features.csv
-      "5mC":       /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/modification/esc_2i_d4_raw_mods.tsv.gz
-      "5hmC":      /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/modification/esc_2i_d4_raw_mods.tsv.gz
-      "6mA":       /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/esc_2i_d4_6ma.bed
-      msp:         /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/esc_2i_d4_msp.bed
+      nucleosomes: /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/modification/d4_nuc_features.csv
+      "5mC":       /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/modification/esc_2i_d4_raw_mods.tsv.gz
+      "5hmC":      /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/modification/esc_2i_d4_raw_mods.tsv.gz
+      "6mA":       /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/esc_2i_d4_6ma.bed
+      msp:         /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/esc_2i_d4_msp.bed
 
 # User-curated master annotation BED4.
 annotations:
-  master: /vast/palmer/scratch/zsmith/mc3365/long_read/first_run/feature_annotation/master_annotations_v3.uniqueID.bed
+  master: /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/feature_annotation/master_annotations_v3.uniqueID.bed
 
 parameters:
   methylation_threshold: 0.5

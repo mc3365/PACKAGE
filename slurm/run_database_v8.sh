@@ -10,10 +10,10 @@
 #SBATCH --mail-user=meiying.cui@yale.edu
 #SBATCH --mail-type=ALL
 
-PYTHON=/vast/palmer/pi/zsmith/mc3365/env/python_env/bin/python
-CODE_DIR=/vast/palmer/scratch/zsmith/mc3365/long_read/first_run/code/build_db
+PYTHON=/nfs/roberts/pi/pi_zs296/mc3365/env/python_env/bin/python
+CODE_DIR=/nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/code/build_db
 SCRIPT=${CODE_DIR}/build_fiber_database_v8.py
-DB_PATH=/vast/palmer/scratch/zsmith/mc3365/long_read/first_run/out/h5/fiber_database_v8.h5
+DB_PATH=/nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/h5/fiber_database_v8.h5
 
 echo "Python: $PYTHON"
 $PYTHON --version
