@@ -26,7 +26,9 @@ The builder is split across three batches matching the V8 source structure:
 
 from __future__ import annotations
 
+import gc
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 
 import h5py
@@ -34,6 +36,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from PACKAGE import __version__
 from PACKAGE.config import Config, SampleConfig
 from PACKAGE.db import schema
 from PACKAGE.utils import get_logger, smart_open
@@ -570,13 +573,215 @@ class FiberDatabaseBuilder:
             )
             self._create_dataset(ig, f"{layer}_slices", slice_data)
 
+    def build(self) -> None:
+        """Run the full build pipeline."""
+        self.output_path.parent.mkdir(parents=True, exist_ok=True)
+        self.validate_inputs()
+
+        log.info("Building PACKAGE HDF5 database")
+        log.info(f"Output: {self.output_path}")
+        log.info(f"Samples: {[s.name for s in self.sample_configs]}")
+
+        with h5py.File(self.output_path, "w") as hf:
+            for sample_config in self.sample_configs:
+                self._build_sample(hf, sample_config)
+                hf.flush()
+            self._load_annotations(hf)
+            self._write_metadata(hf)
+
+        size_gb = self.output_path.stat().st_size / (1024**3)
+        log.info(f"Database complete: {self.output_path} ({size_gb:.3f} GB)")
+
     # ------------------------------------------------------------------
-    # Batch 2 stops here. Full sample orchestration and annotation loading
-    # land in Batch 3.
+    # Build orchestration
     # ------------------------------------------------------------------
 
-    def build(self) -> None:
-        """Run the full build pipeline. To be implemented in Batch 3."""
-        raise NotImplementedError(
-            "FiberDatabaseBuilder.build() will be implemented in Batch 3."
+    def _parse_sample_layers(
+        self,
+        sample_config: SampleConfig,
+        known_fibers: dict[str, set[bytes]],
+    ) -> tuple[
+        dict[str, dict[str, list]],
+        dict[str, dict[str, list]],
+        dict[str, dict[str, list]],
+        dict[str, dict[str, list]],
+    ]:
+        """Parse optional layers configured for one sample."""
+        layers = sample_config.layers
+        mc_data: dict[str, dict[str, list]] = {}
+        hmc_data: dict[str, dict[str, list]] = {}
+        ma_data: dict[str, dict[str, list]] = {}
+        msp_data: dict[str, dict[str, list]] = {}
+
+        want_5mc = "5mC" in layers
+        want_5hmc = "5hmC" in layers
+        modkit_paths = {
+            path
+            for layer, path in layers.items()
+            if layer in {"5mC", "5hmC"}
+        }
+        for modkit_path in sorted(modkit_paths):
+            log.info(f"  Loading modkit extract: {modkit_path.name}")
+            file_wants_5mc = want_5mc and layers.get("5mC") == modkit_path
+            file_wants_5hmc = want_5hmc and layers.get("5hmC") == modkit_path
+            mc_part, hmc_part = self.parse_modkit_extract(
+                modkit_path,
+                known_fibers,
+                want_5mc=file_wants_5mc,
+                want_5hmc=file_wants_5hmc,
+            )
+            if file_wants_5mc:
+                mc_data = self._merge_layer_data(mc_data, mc_part)
+            if file_wants_5hmc:
+                hmc_data = self._merge_layer_data(hmc_data, hmc_part)
+
+        if "6mA" in layers:
+            log.info(f"  Loading 6mA BED12: {layers['6mA'].name}")
+            ma_data = self.parse_bed12_single_base(layers["6mA"], known_fibers)
+
+        if "msp" in layers:
+            log.info(f"  Loading MSP BED12: {layers['msp'].name}")
+            msp_data = self.parse_bed12_intervals(
+                layers["msp"],
+                known_fibers,
+                min_size=self.min_msp_size,
+            )
+
+        return mc_data, hmc_data, ma_data, msp_data
+
+    @staticmethod
+    def _merge_layer_data(
+        left: dict[str, dict[str, list]],
+        right: dict[str, dict[str, list]],
+    ) -> dict[str, dict[str, list]]:
+        """Merge parser outputs keyed as {chrom: {field: list}}."""
+        if not left:
+            return right
+        for chrom, fields in right.items():
+            if chrom not in left:
+                left[chrom] = fields
+                continue
+            for field, values in fields.items():
+                left[chrom].setdefault(field, []).extend(values)
+        return left
+
+    def _build_sample(self, hf: h5py.File, sample_config: SampleConfig) -> None:
+        """Build one sample group."""
+        log.info("=" * 70)
+        log.info(f"Building sample: {sample_config.name}")
+        sample_grp = hf.create_group(sample_config.name)
+        sample_grp.attrs["sample"] = sample_config.name
+
+        log.info("  Loading nucleosome data")
+        nuc_df, fiber_meta, known_fibers = self.load_nucleosome_inputs(sample_config)
+        chromosomes = sorted(nuc_df["chrom"].unique())
+        log.info(
+            f"  {len(nuc_df):,} nucleosome rows, "
+            f"{len(fiber_meta):,} fibers, {len(chromosomes)} chromosomes"
         )
+
+        mc_data, hmc_data, ma_data, msp_data = self._parse_sample_layers(
+            sample_config, known_fibers
+        )
+
+        all_fiber_ids: list[str] = []
+        all_chroms: list[str] = []
+        for chrom in tqdm(chromosomes, desc=f"  Writing {sample_config.name}"):
+            data = self.assemble_chromosome_data(
+                chrom,
+                fiber_meta,
+                nuc_df,
+                mc_data=mc_data,
+                hmc_data=hmc_data,
+                ma_data=ma_data,
+                msp_data=msp_data,
+            )
+            self._write_chrom_data(sample_grp, chrom, data)
+            self._build_indices(sample_grp, chrom, data)
+
+            fm = fiber_meta[fiber_meta["chrom"] == chrom].sort_values("read_id")
+            all_fiber_ids.extend(fm["read_id"].astype(str).tolist())
+            all_chroms.extend([chrom] * len(fm))
+
+            del data
+            gc.collect()
+
+        self._write_fiber_lookup(sample_grp, all_fiber_ids, all_chroms)
+        sample_grp.attrs["n_fibers"] = len(all_fiber_ids)
+        log.info(f"Sample {sample_config.name} complete: {len(all_fiber_ids):,} fibers")
+
+        del nuc_df, fiber_meta, mc_data, hmc_data, ma_data, msp_data
+        gc.collect()
+
+    def _write_fiber_lookup(
+        self,
+        sample_grp: h5py.Group,
+        fiber_ids: list[str],
+        chromosomes: list[str],
+    ) -> None:
+        """Write per-sample global fiber_id -> chromosome lookup."""
+        fid_arr = np.array([self._encode_fiber_id(fid) for fid in fiber_ids], dtype="S50")
+        chrom_arr = np.array([chrom.encode() for chrom in chromosomes], dtype="S10")
+        sort_order = np.argsort(fid_arr)
+
+        lookup = sample_grp.create_group("fiber_lookup")
+        self._create_dataset(lookup, "fiber_ids", fid_arr[sort_order])
+        self._create_dataset(lookup, "chromosomes", chrom_arr[sort_order])
+
+    # ------------------------------------------------------------------
+    # Annotations and metadata
+    # ------------------------------------------------------------------
+
+    def _load_annotations(self, hf: h5py.File) -> None:
+        """Load shared BED4 annotations into annotations/master/features."""
+        if not self.config.annotations:
+            log.info("No annotations configured; skipping annotation load")
+            return
+        if "master" not in self.config.annotations:
+            log.info("No 'master' annotation configured; skipping annotation load")
+            return
+
+        path = self.config.annotations["master"]
+        log.info(f"Loading master annotations: {path}")
+        df = pd.read_csv(
+            path,
+            sep="\t",
+            header=None,
+            names=["chr", "start", "end", "id"],
+            usecols=[0, 1, 2, 3],
+        )
+        df["anno_type"] = df["id"].astype(str).str.replace(r"_\d+$", "", regex=True)
+
+        features = hf.create_group(schema.annotation_features_path())
+        for anno_type in sorted(df["anno_type"].unique()):
+            ad = df[df["anno_type"] == anno_type]
+            arr = np.array(
+                list(zip(ad["chr"], ad["start"], ad["end"], ad["id"], strict=False)),
+                dtype=schema.ANNOTATION_REGION_DTYPE,
+            )
+            self._create_dataset(features, anno_type, arr)
+        hf["annotations/master"].attrs["n_features"] = len(df)
+        log.info(f"  {len(df):,} annotations across {df['anno_type'].nunique()} types")
+
+    def _write_metadata(self, hf: h5py.File) -> None:
+        """Write top-level metadata attributes."""
+        meta = hf.create_group(schema.metadata_path())
+        meta.attrs[schema.META_SCHEMA_VERSION] = schema.SCHEMA_VERSION
+        meta.attrs["version"] = "v8_integer_ids"
+        meta.attrs[schema.META_GENOME_VERSION] = "unknown"
+        meta.attrs[schema.META_BUILD_DATE] = datetime.now().isoformat()
+        meta.attrs[schema.META_PACKAGE_VERSION] = __version__
+        meta.attrs[schema.META_METHYLATION_THRESHOLD] = self.methylation_threshold
+        meta.attrs[schema.META_MIN_MSP_SIZE] = self.min_msp_size
+        meta.attrs["samples"] = ",".join(sc.name for sc in self.sample_configs)
+        meta.attrs["coordinate_system"] = "0-based (BED/BAM convention)"
+        meta.attrs["id_encoding"] = "uint32 per-chromosome"
+        meta.attrs["5mC_source"] = "modkit extract (mod_code=m)"
+        meta.attrs["5hmC_source"] = "modkit extract (mod_code=h)"
+        meta.attrs["6mA_source"] = "ft extract --m6a BED12"
+        meta.attrs["msp_source"] = "ft extract --msp BED12"
+
+        for sample_config in self.sample_configs:
+            sample = sample_config.name
+            if sample in hf:
+                meta.attrs[f"n_fibers_{sample}"] = hf[sample].attrs.get("n_fibers", 0)

@@ -516,3 +516,75 @@ def test_write_chrom_data_skips_absent_optional_layers(tmp_path):
         assert "5hmC" not in sample["chr1"]
         assert "6mA" not in sample["chr1"]
         assert "msp" not in sample["chr1"]
+
+
+def test_build_database_end_to_end_from_extracted_files(tmp_path):
+    """Tiny end-to-end build from extracted-style inputs, then query the result."""
+    nuc_path = _write(
+        tmp_path,
+        "nuc.csv",
+        "\n".join([
+            "chrom,read_id,nuc_start,nuc_end,width,linker_dist",
+            "chr1,fiber_a,100,180,80,",
+            "chr1,fiber_a,220,300,80,40",
+            "chr1,fiber_b,500,650,150,",
+            "chr2,fiber_c,1000,1150,150,",
+        ]) + "\n",
+    )
+    mods_path = _write(tmp_path, "raw_mods.tsv", _MODKIT_TEXT)
+    ma_path = _write(tmp_path, "6ma.bed", _BED12_6MA_TEXT)
+    msp_path = _write(tmp_path, "msp.bed", _BED12_MSP_TEXT)
+    anno_path = _write(
+        tmp_path,
+        "master.bed",
+        "\n".join([
+            "chr1\t90\t320\tCGI_1",
+            "chr1\t450\t700\tCGI_2",
+            "chr2\t950\t1200\tEnhancer_1",
+        ]) + "\n",
+    )
+
+    cfg = Config.model_validate({
+        "output_dir": str(tmp_path / "out"),
+        "output_file": "built.h5",
+        "samples": [
+            {
+                "name": "d0",
+                "layers": {
+                    "nucleosomes": str(nuc_path),
+                    "5mC": str(mods_path),
+                    "5hmC": str(mods_path),
+                    "6mA": str(ma_path),
+                    "msp": str(msp_path),
+                },
+            }
+        ],
+        "annotations": {"master": str(anno_path)},
+        "parameters": {"methylation_threshold": 0.5, "min_msp_size": 10},
+    })
+
+    build_database(cfg)
+
+    assert cfg.output_path.exists()
+    with h5py.File(cfg.output_path, "r") as hf:
+        assert "d0/chr1/fiber_id_table" in hf
+        assert "d0/chr1/_indices/nucleosomes_slices" in hf
+        assert "d0/fiber_lookup/fiber_ids" in hf
+        assert "annotations/master/features/CGI" in hf
+        assert hf["metadata"].attrs["methylation_threshold"] == 0.5
+
+    with FiberDatabase(cfg.output_path) as db:
+        assert db.samples == ["d0"]
+        assert db.list_annotations() == ["CGI", "Enhancer"]
+        assert db.get_chromosomes("d0") == ["chr1", "chr2"]
+
+        fiber_a_nuc = db.get_nucleosomes("fiber_a", "chr1", sample="d0")
+        assert fiber_a_nuc["starts"].tolist() == [100, 220]
+
+        fiber_a_mc = db.get_methylation("fiber_a", "chr1", sample="d0")
+        assert fiber_a_mc["positions"].tolist() == [100, 200]
+        assert fiber_a_mc["is_methylated"].tolist() == [True, False]
+
+        df = db.query_annotation_fast("CGI", sample="d0", max_regions=1)
+        assert set(df["fiber_id"]) == {"fiber_a"}
+        assert df.iloc[0]["n_nucleosomes"] == 2
