@@ -32,7 +32,11 @@ def get_logger(name: str = "PACKAGE") -> logging.Logger:
 
 
 def smart_open(filepath: str | Path, mode: str = "rt") -> IO:
-    """Open a file with automatic gzip detection by extension.
+    """Open a file with automatic gzip detection.
+
+    For reads, detect gzip from the file's magic bytes rather than the extension.
+    Some upstream tools produce plain-text files with a ``.gz`` suffix; trusting
+    the suffix would raise ``gzip.BadGzipFile`` mid-read.
 
     Args:
         filepath: Path to the file.
@@ -42,6 +46,13 @@ def smart_open(filepath: str | Path, mode: str = "rt") -> IO:
         A file-like object. Caller is responsible for closing (use a with block).
     """
     filepath = Path(filepath)
+    if "r" in mode:
+        with open(filepath, "rb") as f:
+            is_gzip = f.read(2) == b"\x1f\x8b"
+        if is_gzip:
+            return gzip.open(filepath, mode)
+        return open(filepath, mode)
+
     if filepath.suffix == ".gz":
         return gzip.open(filepath, mode)
     return open(filepath, mode)
