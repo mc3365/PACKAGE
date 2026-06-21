@@ -29,7 +29,6 @@ from pathlib import Path
 
 import pandas as pd
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -256,7 +255,7 @@ def main() -> int:
         failures += 1
 
     # ----- Test 5: bulk query with all 5 layers -----
-    print(f"\n[5/6] query_annotation_fast with all layers")
+    print("\n[5/6] query_annotation_fast with all layers")
     all_layers = ["nucleosomes", "5mC", "5hmC", "6mA", "msp"]
     df_v8_all = db_v8.query_annotation_fast(
         args.annotation,
@@ -274,7 +273,7 @@ def main() -> int:
         failures += 1
 
     # ----- Test 6: per-fiber accessors on one fiber -----
-    print(f"\n[6/6] per-fiber accessors on one fiber")
+    print("\n[6/6] per-fiber accessors on one fiber")
     # Pick a real fiber from the first chromosome that has data
     chrom0 = c_v8[0]
     fids_v8 = db_v8.get_fibers_at(chrom0, 0, 10_000_000, sample=sample)
