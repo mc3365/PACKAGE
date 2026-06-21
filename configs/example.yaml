@@ -41,3 +41,8 @@ annotations:
 parameters:
   methylation_threshold: 0.5
   min_msp_size: 10
+
+extraction:
+  threads: 16
+  overwrite: false
+  keep_nucleosome_bed: true
