@@ -321,11 +321,25 @@ class FiberDatabase:
         int_id = self._str_to_int(fiber_id, sample, chrom)
         if int_id is None:
             return None
-        idx = self.db[slice_path][:]
-        mask = idx["fiber_int_id"] == int_id
-        if not mask.any():
+        # Slice indices are written in ascending fiber_int_id order. Binary-search
+        # the on-disk dataset so repeated per-fiber access does not load a complete
+        # chromosome index for every lookup.
+        idx = self.db[slice_path]
+        target = int(int_id)
+        low, high = 0, len(idx)
+        while low < high:
+            mid = (low + high) // 2
+            row = idx[mid]
+            row_id = int(row["fiber_int_id"])
+            if row_id < target:
+                low = mid + 1
+            else:
+                high = mid
+        if low >= len(idx):
             return None
-        row = idx[mask][0]
+        row = idx[low]
+        if int(row["fiber_int_id"]) != target:
+            return None
         return (int(row["start"]), int(row["end"]))
 
     def get_nucleosomes(

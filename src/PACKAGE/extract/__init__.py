@@ -3,16 +3,14 @@
 Architecture
 ============
 
-Platform-specific extraction is isolated in ``ont.py`` and ``pacbio.py``. Both modules
-expose ``extract_samples(config, samples=...)`` with the same signature; the CLI
-dispatches based on ``--platform``.
+Platform-specific extraction is isolated in ``ont.py`` and ``pacbio.py``. ONT is the
+validated implementation; PacBio is currently a placeholder for a future release.
 
 Each platform module orchestrates established tools:
 
 - **ONT** (``ont.py``): modkit extract (5mC/5hmC) + fibertools-rs ft extract (m6A, MSP,
   nucleosomes)
-- **PacBio** (``pacbio.py``): pb-CpG-tools or fibertools (5mC) + fibertools-rs ft extract
-  (m6A, MSP, nucleosomes)
+- **PacBio** (``pacbio.py``): placeholder only; not implemented in this release
 
 Shared helpers live in:
 

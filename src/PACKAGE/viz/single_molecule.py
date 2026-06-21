@@ -1,29 +1,29 @@
-"""Per-molecule visualization: heatmap of individual fibers in a region.
-
-The flagship visualization for PACKAGE. Shows what bulk methods cannot: each row is
-one molecule, columns are positions in a genomic region, and color encodes the
-modification state at that position on that molecule. Nucleosome positions and MSPs
-can be overlaid as horizontal bars.
-
-STATUS: Stub. Implementation deferred until the database query layer is solid.
-"""
+"""Single-molecule visualization for genomic regions."""
 
 from __future__ import annotations
 
 from typing import Any
 
+_SUPPORTED_LAYERS = {"5mC", "5hmC", "6mA"}
+
 
 def single_molecule_heatmap(
-    db: Any,                            # PACKAGE.db.FiberDatabase
+    db: Any,
     chrom: str,
     start: int,
     end: int,
     sample: str | None = None,
     layer: str = "5mC",
     max_fibers: int = 100,
-    ax: Any = None,                     # matplotlib.axes.Axes | None
-) -> Any:                               # matplotlib.figure.Figure
-    """Render a per-molecule heatmap for one genomic region.
+    ax: Any = None,
+) -> Any:
+    """Render modification calls, nucleosomes, and MSPs for individual fibers.
+
+    Each row represents one molecule. Nucleosomes are gray blocks, MSPs are teal
+    outlines, and modification calls are vertical marks. For 5mC and 5hmC, called
+    modified bases are red and unmodified bases are light gray. 6mA calls are gold.
+    The implementation draws sparse genomic features rather than allocating a dense
+    base-by-fiber matrix.
 
     Args:
         db: An open FiberDatabase.
@@ -34,6 +34,140 @@ def single_molecule_heatmap(
         ax: Optional existing matplotlib axes; if None, a new figure is created.
 
     Returns:
-        The matplotlib Figure.
+        The matplotlib ``Figure`` containing the plot.
+
+    Raises:
+        ValueError: If coordinates, sample, layer, or ``max_fibers`` are invalid.
+        ImportError: If matplotlib is not installed.
     """
-    raise NotImplementedError("Single-molecule heatmap to be implemented")
+    try:
+        import matplotlib.pyplot as plt
+        from matplotlib.lines import Line2D
+        from matplotlib.patches import Patch, Rectangle
+    except ImportError as exc:  # pragma: no cover - depends on optional environment
+        raise ImportError(
+            'Visualization requires matplotlib. Install it with `pip install ".[viz]"`.'
+        ) from exc
+
+    if start < 0 or end <= start:
+        raise ValueError("Region must satisfy 0 <= start < end")
+    if layer not in _SUPPORTED_LAYERS:
+        raise ValueError(f"layer must be one of {sorted(_SUPPORTED_LAYERS)}")
+    if max_fibers < 1:
+        raise ValueError("max_fibers must be at least 1")
+
+    sample = sample or db.samples[0]
+    if sample not in db.samples:
+        raise ValueError(f"Unknown sample {sample!r}; available samples: {db.samples}")
+
+    fiber_ids = sorted(db.get_fibers_at(chrom, start, end, sample=sample))[:max_fibers]
+    if ax is None:
+        height = max(2.5, min(12.0, 1.5 + 0.22 * max(len(fiber_ids), 1)))
+        fig, ax = plt.subplots(figsize=(11, height), constrained_layout=True)
+    else:
+        fig = ax.figure
+
+    row_height = 0.62
+    for row, fiber_id in enumerate(fiber_ids):
+        ax.hlines(row, start, end, color="#d6d6d6", linewidth=0.6, zorder=0)
+
+        nucleosomes = db.get_nucleosomes(fiber_id, chrom, sample=sample)
+        for feature_start, feature_end in zip(
+            nucleosomes.get("starts", []), nucleosomes.get("ends", []), strict=False
+        ):
+            left = max(int(feature_start), start)
+            right = min(int(feature_end), end)
+            if right > left:
+                ax.add_patch(
+                    Rectangle(
+                        (left, row - row_height / 2),
+                        right - left,
+                        row_height,
+                        facecolor="#55585c",
+                        edgecolor="none",
+                        zorder=1,
+                    )
+                )
+
+        msps = db.get_msp(fiber_id, chrom, sample=sample)
+        for feature_start, feature_end in zip(
+            msps.get("starts", []), msps.get("ends", []), strict=False
+        ):
+            left = max(int(feature_start), start)
+            right = min(int(feature_end), end)
+            if right > left:
+                ax.add_patch(
+                    Rectangle(
+                        (left, row - row_height / 2),
+                        right - left,
+                        row_height,
+                        facecolor="none",
+                        edgecolor="#168a8a",
+                        linewidth=1.0,
+                        zorder=2,
+                    )
+                )
+
+        modifications = db.get_methylation(
+            fiber_id, chrom, mod_type=layer, sample=sample
+        )
+        positions = modifications.get("positions", [])
+        in_region = [i for i, position in enumerate(positions) if start <= position < end]
+        if not in_region:
+            continue
+
+        if layer == "6mA" or "is_methylated" not in modifications:
+            colors = ["#e3a018"] * len(in_region)
+        else:
+            calls = modifications["is_methylated"]
+            colors = ["#c43c39" if bool(calls[i]) else "#c7c9cc" for i in in_region]
+        ax.scatter(
+            [positions[i] for i in in_region],
+            [row] * len(in_region),
+            marker="|",
+            s=48,
+            linewidths=1.3,
+            c=colors,
+            zorder=3,
+        )
+
+    ax.set_xlim(start, end)
+    ax.set_ylim(-0.75, max(len(fiber_ids) - 0.25, 0.75))
+    ax.invert_yaxis()
+    ax.set_xlabel(f"{chrom} position (bp)")
+    ax.set_ylabel("Individual fibers")
+    ax.set_title(f"{sample}: {chrom}:{start:,}-{end:,} ({layer})")
+    ax.ticklabel_format(axis="x", style="plain", useOffset=False)
+    ax.set_yticks([])
+    ax.spines[["top", "right", "left"]].set_visible(False)
+
+    if not fiber_ids:
+        ax.text(
+            0.5,
+            0.5,
+            "No overlapping fibers",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            color="#55585c",
+        )
+
+    modification_handles = (
+        [Line2D([], [], color="#e3a018", marker="|", linestyle="None", label="6mA")]
+        if layer == "6mA"
+        else [
+            Line2D([], [], color="#c43c39", marker="|", linestyle="None", label=layer),
+            Line2D([], [], color="#c7c9cc", marker="|", linestyle="None", label="Unmodified"),
+        ]
+    )
+    ax.legend(
+        handles=[
+            Patch(facecolor="#55585c", label="Nucleosome"),
+            Patch(facecolor="none", edgecolor="#168a8a", label="MSP"),
+            *modification_handles,
+        ],
+        loc="upper right",
+        frameon=False,
+        ncols=min(4, 2 + len(modification_handles)),
+    )
+    return fig

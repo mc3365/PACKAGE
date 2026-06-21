@@ -2,7 +2,7 @@
 
 Exposed after `pip install` as the `PACKAGE` command. Subcommands:
 
-    PACKAGE extract    Extract modifications from BAM files (ONT or PacBio)
+    PACKAGE extract    Extract modifications from ONT BAM files
     PACKAGE build      Build an HDF5 database from extracted intermediate files
     PACKAGE query      Query an existing HDF5 database
     PACKAGE info       Print database summary
@@ -52,9 +52,8 @@ def cli() -> None:
 def extract(config_path: Path, platform: str, samples: tuple[str, ...]) -> None:
     """Extract modification calls and accessibility features from BAM files.
 
-    This wraps modkit (5mC/5hmC) + fibertools-rs ft extract (m6A, MSP, nucleosomes) for
-    ONT data, or pb-CpG-tools + fibertools-rs for PacBio data. Outputs intermediate
-    files that can then be passed to `PACKAGE build`.
+    ONT extraction wraps modkit (5mC/5hmC) and fibertools-rs (6mA, MSP,
+    nucleosomes). PacBio extraction is reserved for a future release.
     """
     from PACKAGE.config import load_config
 

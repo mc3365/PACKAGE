@@ -30,6 +30,11 @@ Example YAML
       methylation_threshold: 0.5
       min_msp_size: 10
 
+    extraction:
+      threads: 16
+      overwrite: false
+      keep_nucleosome_bed: true
+
 Load with::
 
     from PACKAGE.config import load_config
@@ -110,6 +115,21 @@ class ParametersConfig(BaseModel):
     )
 
 
+class ExtractionConfig(BaseModel):
+    """External-tool settings for BAM-to-intermediate extraction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    threads: int = Field(default=16, ge=1)
+    overwrite: bool = False
+    keep_nucleosome_bed: bool = True
+    validate_bam: bool = True
+    write_manifest: bool = True
+    modkit_executable: str = "modkit"
+    ft_executable: str = "ft"
+    samtools_executable: str = "samtools"
+
+
 class Config(BaseModel):
     """Top-level PACKAGE configuration."""
 
@@ -133,6 +153,7 @@ class Config(BaseModel):
         ),
     )
     parameters: ParametersConfig = Field(default_factory=ParametersConfig)
+    extraction: ExtractionConfig = Field(default_factory=ExtractionConfig)
 
     @property
     def output_path(self) -> Path:

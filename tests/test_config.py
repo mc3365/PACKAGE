@@ -41,7 +41,35 @@ def test_load_valid_config(tmp_path):
     assert isinstance(cfg, Config)
     assert cfg.sample_names == ["d0"]
     assert cfg.parameters.methylation_threshold == 0.5
+    assert cfg.extraction.threads == 16
+    assert cfg.extraction.overwrite is False
+    assert cfg.extraction.validate_bam is True
+    assert cfg.extraction.write_manifest is True
     assert cfg.output_path == tmp_path / "out" / "fibers.h5"
+
+
+def test_extraction_settings_are_typed_and_validated(tmp_path):
+    """Extraction settings should be configurable without affecting old configs."""
+    cfg_path = _write_yaml(
+        tmp_path / "extract.yaml",
+        {
+            "output_dir": str(tmp_path),
+            "samples": [_minimal_sample_dict(tmp_path)],
+            "extraction": {
+                "threads": 8,
+                "overwrite": True,
+                "keep_nucleosome_bed": False,
+                "validate_bam": False,
+                "write_manifest": False,
+            },
+        },
+    )
+    cfg = load_config(cfg_path)
+    assert cfg.extraction.threads == 8
+    assert cfg.extraction.overwrite is True
+    assert cfg.extraction.keep_nucleosome_bed is False
+    assert cfg.extraction.validate_bam is False
+    assert cfg.extraction.write_manifest is False
 
 
 def test_load_missing_file_raises(tmp_path):
