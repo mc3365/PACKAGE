@@ -20,6 +20,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from PACKAGE.config import Config, SampleConfig
+from PACKAGE.extract.manifest import capture_tool_versions, write_manifest
+from PACKAGE.extract.qc import compute_qc_metrics, validate_bam
 from PACKAGE.utils import get_logger, smart_open
 
 log = get_logger(__name__)
@@ -91,10 +93,26 @@ def flatten_nucleosome_bed12(input_bed: Path, output_csv: Path) -> int:
     return rows_written
 
 
-def _run(command: Sequence[str]) -> None:
+def _run(command: Sequence[str], command_log: list[list[str]] | None = None) -> None:
     """Run one external command with logging and fail on nonzero exit."""
-    log.info("Running: " + " ".join(map(str, command)))
-    subprocess.run([str(part) for part in command], check=True)
+    normalized = [str(part) for part in command]
+    log.info("Running: " + " ".join(normalized))
+    if command_log is not None:
+        command_log.append(normalized)
+    subprocess.run(normalized, check=True)
+
+
+def _validate_outputs(sample: SampleConfig) -> dict[str, dict[str, str | int]]:
+    """Require every configured extraction output to exist and be nonempty."""
+    outputs: dict[str, dict[str, str | int]] = {}
+    for layer, path in sample.layers.items():
+        if not path.exists():
+            raise FileNotFoundError(f"Configured {layer} output was not created: {path}")
+        size = path.stat().st_size
+        if size == 0:
+            raise ValueError(f"Configured {layer} output is empty: {path}")
+        outputs[layer] = {"path": str(path), "size_bytes": size}
+    return outputs
 
 
 def _validate_sample_inputs(config: Config, sample: SampleConfig) -> None:
@@ -124,6 +142,19 @@ def extract_sample(config: Config, sample: SampleConfig) -> None:
     ft = _resolve_executable(settings.ft_executable)
     assert sample.bam is not None
     assert config.reference is not None
+    command_log: list[list[str]] = []
+
+    bam_qc = {}
+    samtools: str | None = None
+    if settings.validate_bam:
+        samtools = _resolve_executable(settings.samtools_executable)
+        log.info(f"Validating BAM: {sample.bam}")
+        bam_qc = validate_bam(sample.bam, "ont", samtools)
+        log.info(
+            "BAM validation passed: "
+            f"{bam_qc['records_with_mm_ml_tags']}/"
+            f"{bam_qc['records_checked_for_tags']} sampled reads have MM/ML tags"
+        )
 
     for path in sample.layers.values():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -147,7 +178,8 @@ def extract_sample(config: Config, sample: SampleConfig) -> None:
                     str(config.reference),
                     str(sample.bam),
                     str(output),
-                ]
+                ],
+                command_log,
             )
         else:
             log.info(f"Skipping existing modkit output: {output}")
@@ -158,7 +190,7 @@ def extract_sample(config: Config, sample: SampleConfig) -> None:
         if output is None:
             continue
         if settings.overwrite or not output.exists():
-            _run([ft, "extract", flag, str(output), str(sample.bam)])
+            _run([ft, "extract", flag, str(output), str(sample.bam)], command_log)
         else:
             log.info(f"Skipping existing {layer} output: {output}")
 
@@ -166,13 +198,49 @@ def extract_sample(config: Config, sample: SampleConfig) -> None:
     nuc_bed = _nucleosome_bed_path(nuc_csv)
     if settings.overwrite or not nuc_csv.exists():
         if settings.overwrite or not nuc_bed.exists():
-            _run([ft, "extract", "--nuc", str(nuc_bed), str(sample.bam)])
+            _run(
+                [ft, "extract", "--nuc", str(nuc_bed), str(sample.bam)],
+                command_log,
+            )
         rows = flatten_nucleosome_bed12(nuc_bed, nuc_csv)
         log.info(f"Wrote {rows:,} nucleosome rows: {nuc_csv}")
         if not settings.keep_nucleosome_bed:
             nuc_bed.unlink()
     else:
         log.info(f"Skipping existing nucleosome CSV: {nuc_csv}")
+
+    outputs = _validate_outputs(sample)
+    if settings.write_manifest:
+        executables = {"fibertools-rs": ft}
+        if methylation_paths:
+            executables["modkit"] = modkit
+        if samtools is not None:
+            executables["samtools"] = samtools
+        output_dir = nuc_csv.parent
+        manifest_path = write_manifest(
+            output_dir,
+            {
+                "sample": sample.name,
+                "platform": "ont",
+                "input": {
+                    "bam": str(sample.bam),
+                    "bam_size_bytes": sample.bam.stat().st_size,
+                    "reference": str(config.reference),
+                },
+                "bam_qc": bam_qc,
+                "tools": capture_tool_versions(executables),
+                "parameters": {
+                    "threads": settings.threads,
+                    "overwrite": settings.overwrite,
+                    "methylation_threshold": config.parameters.methylation_threshold,
+                },
+                "commands_run": command_log,
+                "outputs": outputs,
+                "output_inventory": compute_qc_metrics(output_dir),
+            },
+            filename=f"PACKAGE_manifest_{sample.name}.json",
+        )
+        log.info(f"Wrote extraction manifest: {manifest_path}")
 
 
 def extract_samples(config: Config, samples: list[str] | None = None) -> None:

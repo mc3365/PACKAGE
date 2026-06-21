@@ -123,8 +123,11 @@ class ExtractionConfig(BaseModel):
     threads: int = Field(default=16, ge=1)
     overwrite: bool = False
     keep_nucleosome_bed: bool = True
+    validate_bam: bool = True
+    write_manifest: bool = True
     modkit_executable: str = "modkit"
     ft_executable: str = "ft"
+    samtools_executable: str = "samtools"
 
 
 class Config(BaseModel):

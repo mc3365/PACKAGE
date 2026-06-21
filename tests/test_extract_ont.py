@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -36,7 +37,12 @@ def _config(tmp_path: Path, *, overwrite: bool = False) -> Config:
                     },
                 }
             ],
-            "extraction": {"threads": 7, "overwrite": overwrite},
+            "extraction": {
+                "threads": 7,
+                "overwrite": overwrite,
+                "validate_bam": False,
+                "write_manifest": False,
+            },
         }
     )
 
@@ -87,6 +93,10 @@ def test_extract_sample_runs_validated_ont_commands(tmp_path, monkeypatch):
         commands.append(command)
         if "--nuc" in command:
             Path(command[3]).write_text(_NUC_BED12)
+        elif command[1:3] == ["extract", "full"]:
+            Path(command[-1]).write_text("modkit output\n")
+        elif command[1] == "extract":
+            Path(command[3]).write_text("ft output\n")
 
     monkeypatch.setattr("PACKAGE.extract.ont.subprocess.run", fake_run)
 
@@ -167,3 +177,39 @@ def test_nucleosome_only_extraction_does_not_require_modkit(tmp_path, monkeypatc
     monkeypatch.setattr("PACKAGE.extract.ont.subprocess.run", fake_run)
     extract_sample(cfg, sample)
     assert sample.layers["nucleosomes"].exists()
+
+
+def test_extract_sample_validates_bam_and_writes_manifest(tmp_path, monkeypatch):
+    cfg = _config(tmp_path)
+    cfg.extraction.validate_bam = True
+    cfg.extraction.write_manifest = True
+    sample = cfg.samples[0]
+    for path in set(sample.layers.values()):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("existing output")
+
+    monkeypatch.setattr(
+        "PACKAGE.extract.ont.shutil.which",
+        lambda name: f"/tools/{name}",
+    )
+    monkeypatch.setattr(
+        "PACKAGE.extract.ont.validate_bam",
+        lambda *args: {
+            "records_checked_for_tags": 10,
+            "records_with_mm_ml_tags": 9,
+        },
+    )
+    monkeypatch.setattr(
+        "PACKAGE.extract.ont.capture_tool_versions",
+        lambda tools: {name: "test version" for name in tools},
+    )
+
+    extract_sample(cfg, sample)
+
+    manifest = sample.layers["nucleosomes"].parent / "PACKAGE_manifest_d0.json"
+    data = json.loads(manifest.read_text())
+    assert data["sample"] == "d0"
+    assert data["platform"] == "ont"
+    assert data["bam_qc"]["records_with_mm_ml_tags"] == 9
+    assert data["parameters"]["methylation_threshold"] == 0.5
+    assert set(data["outputs"]) == {"nucleosomes", "5mC", "5hmC", "6mA", "msp"}

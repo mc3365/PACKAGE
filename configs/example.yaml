@@ -46,3 +46,8 @@ extraction:
   threads: 16
   overwrite: false
   keep_nucleosome_bed: true
+  validate_bam: true
+  write_manifest: true
+  modkit_executable: /nfs/roberts/pi/pi_zs296/mc3365/env/ont_env/bin/modkit
+  ft_executable: /nfs/roberts/pi/pi_zs296/mc3365/env/ont_env/bin/ft
+  samtools_executable: /nfs/roberts/pi/pi_zs296/mc3365/env/ont_env/bin/samtools
