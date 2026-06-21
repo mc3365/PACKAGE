@@ -13,10 +13,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import h5py
+import numpy as np
+import pandas as pd
 import pytest
 
 from PACKAGE.config import Config
 from PACKAGE.db.builder import FiberDatabaseBuilder, build_database
+from PACKAGE.db.database import FiberDatabase
 
 # ---------------------------------------------------------------------------
 # Tiny fixture inputs
@@ -319,3 +323,268 @@ def test_builder_class_constants_match_v8():
     assert FiberDatabaseBuilder._MODKIT_COL_CHROM == 3
     assert FiberDatabaseBuilder._MODKIT_COL_MOD_QUAL == 12
     assert FiberDatabaseBuilder._MODKIT_COL_MOD_CODE == 13
+
+
+# ---------------------------------------------------------------------------
+# Batch 2: integer ID mapping + per-chromosome assembly/write helpers
+# ---------------------------------------------------------------------------
+def test_build_fiber_int_map_normalizes_to_bytes_and_uint32(tmp_path):
+    builder = _make_builder(tmp_path)
+    str_to_int, table = builder._build_fiber_int_map(["fiber_b", b"fiber_a"])
+
+    assert table.dtype.kind == "S"
+    assert table.tolist() == [b"fiber_b", b"fiber_a"]
+    assert str_to_int[b"fiber_b"] == np.uint32(0)
+    assert str_to_int[b"fiber_a"] == np.uint32(1)
+
+    mapped = builder._map_fids_to_int(["fiber_a", b"fiber_b"], str_to_int)
+    assert mapped.dtype == np.uint32
+    assert mapped.tolist() == [1, 0]
+
+
+def test_sort_and_assemble_stable_sorts_parallel_arrays(tmp_path):
+    builder = _make_builder(tmp_path)
+    str_to_int, _ = builder._build_fiber_int_map(["fiber_a", "fiber_b"])
+
+    sorted_fids, sorted_arrays = builder._sort_and_assemble(
+        ["fiber_b", "fiber_a", "fiber_b", "fiber_a"],
+        {"pos": [40, 10, 50, 20], "prob": [0.4, 0.1, 0.5, 0.2]},
+        str_to_int,
+    )
+
+    assert sorted_fids.tolist() == [0, 0, 1, 1]
+    # Stable sort preserves within-fiber input order: fiber_a positions 10 then 20.
+    assert sorted_arrays["pos"].tolist() == [10, 20, 40, 50]
+    assert sorted_arrays["prob"].tolist() == [0.1, 0.2, 0.4, 0.5]
+
+
+def test_load_nucleosome_inputs_builds_fiber_metadata_and_known_sets(tmp_path):
+    nuc_path = _write(
+        tmp_path,
+        "nuc.csv",
+        "\n".join([
+            "chrom,read_id,nuc_start,nuc_end,width,linker_dist",
+            "chr1,fiber_b,300,450,150,20",
+            "chr1,fiber_a,100,250,150,",
+            "chr1,fiber_a,260,400,140,10",
+            "chr2,fiber_c,500,650,150,.",
+        ]).replace(",.", ",") + "\n",
+    )
+    cfg = Config.model_validate({
+        "output_dir": str(tmp_path / "out"),
+        "samples": [{"name": "d0", "layers": {"nucleosomes": str(nuc_path)}}],
+    })
+    builder = FiberDatabaseBuilder(cfg, list(cfg.samples))
+
+    nuc_df, fiber_meta, known = builder.load_nucleosome_inputs(cfg.samples[0])
+
+    assert len(nuc_df) == 4
+    assert set(known["chr1"]) == {b"fiber_a", b"fiber_b"}
+    row = fiber_meta[fiber_meta["read_id"] == "fiber_a"].iloc[0]
+    assert row["start"] == 100
+    assert row["end"] == 400
+
+
+def _assembly_inputs():
+    nuc_df = pd.DataFrame({
+        "chrom": ["chr1", "chr1", "chr1", "chr1", "chr1"],
+        "read_id": ["fiber_b", "fiber_a", "fiber_a", "fiber_b", "fiber_a"],
+        "nuc_start": [500, 100, 300, 700, 200],
+        "nuc_end": [650, 180, 360, 820, 280],
+        "width": [150, 80, 60, 120, 80],
+        "linker_dist": [-1, -1, 20, 50, 20],
+    })
+    fiber_meta = (
+        nuc_df.groupby(["chrom", "read_id"])
+        .agg(start=("nuc_start", "min"), end=("nuc_end", "max"))
+        .reset_index()
+        .sort_values(["chrom", "read_id"])
+        .reset_index(drop=True)
+    )
+    mc_data = {
+        "chr1": {
+            "fids": [b"fiber_b", b"fiber_a", b"fiber_b"],
+            "pos": [710, 120, 730],
+            "prob": [0.49, 0.50, 0.90],
+        }
+    }
+    hmc_data = {"chr1": {"fids": [b"fiber_a"], "pos": [150], "prob": [0.20]}}
+    ma_data = {"chr1": {"fids": [b"fiber_b", b"fiber_a"], "pos": [740, 130]}}
+    msp_data = {"chr1": {"fids": [b"fiber_b"], "starts": [705], "ends": [760], "widths": [55]}}
+    return nuc_df, fiber_meta, mc_data, hmc_data, ma_data, msp_data
+
+
+def test_assemble_chromosome_data_matches_v8_sorting_and_threshold(tmp_path):
+    builder = _make_builder(tmp_path)
+    nuc_df, fiber_meta, mc_data, hmc_data, ma_data, msp_data = _assembly_inputs()
+
+    data = builder.assemble_chromosome_data(
+        "chr1", fiber_meta, nuc_df, mc_data, hmc_data, ma_data, msp_data
+    )
+
+    # Sorted unique read IDs define per-chromosome integer IDs.
+    assert data["fiber_id_table"].tolist() == [b"fiber_a", b"fiber_b"]
+    assert data["fm_int_ids"].tolist() == [0, 1]
+
+    # Nucleosomes are stable-sorted by int ID. fiber_a rows appear in original
+    # fiber_a order from nuc_df: starts 100, 300, 200.
+    assert data["nuc_int_ids"].tolist() == [0, 0, 0, 1, 1]
+    assert data["nuc_starts"].tolist() == [100, 300, 200, 500, 700]
+
+    # Methylation calls are grouped by fiber int ID; threshold is >= 0.5.
+    assert data["mc_int_ids"].tolist() == [0, 1, 1]
+    assert data["mc_pos"].tolist() == [120, 710, 730]
+    assert data["mc_is_meth"].tolist() == [True, False, True]
+
+    assert data["hmc_int_ids"].tolist() == [0]
+    assert data["ma_int_ids"].tolist() == [0, 1]
+    assert data["msp_int_ids"].tolist() == [1]
+
+
+def test_write_chrom_data_and_indices_round_trip_through_fiber_database(tmp_path):
+    builder = _make_builder(tmp_path)
+    nuc_df, fiber_meta, mc_data, hmc_data, ma_data, msp_data = _assembly_inputs()
+    data = builder.assemble_chromosome_data(
+        "chr1", fiber_meta, nuc_df, mc_data, hmc_data, ma_data, msp_data
+    )
+
+    db_path = tmp_path / "assembled.h5"
+    with h5py.File(db_path, "w") as hf:
+        meta = hf.create_group("metadata")
+        meta.attrs["version"] = "8.0"
+        meta.attrs["genome_version"] = "mm10"
+        meta.attrs["methylation_threshold"] = 0.5
+
+        sample = hf.create_group("d0")
+        builder._write_chrom_data(sample, "chr1", data)
+        builder._build_indices(sample, "chr1", data)
+
+        lookup = sample.create_group("fiber_lookup")
+        lookup.create_dataset(
+            "fiber_ids",
+            data=np.array([b"fiber_a", b"fiber_b"], dtype="S50"),
+            compression="gzip",
+        )
+        lookup.create_dataset(
+            "chromosomes",
+            data=np.array([b"chr1", b"chr1"], dtype="S10"),
+            compression="gzip",
+        )
+
+    with h5py.File(db_path, "r") as hf:
+        assert hf["d0/chr1/_indices/nucleosomes_slices"][:].tolist() == [
+            (0, 0, 3),
+            (1, 3, 5),
+        ]
+        assert hf["d0/chr1/_indices/5mC_slices"][:].tolist() == [
+            (0, 0, 1),
+            (1, 1, 3),
+        ]
+        assert "5hmC" in hf["d0/chr1"]
+        assert "6mA" in hf["d0/chr1"]
+        assert "msp" in hf["d0/chr1"]
+
+    with FiberDatabase(db_path) as db:
+        nuc = db.get_nucleosomes("fiber_a", "chr1", sample="d0")
+        assert nuc["starts"].tolist() == [100, 300, 200]
+
+        meth = db.get_methylation("fiber_b", "chr1", sample="d0")
+        assert meth["positions"].tolist() == [710, 730]
+        assert meth["is_methylated"].tolist() == [False, True]
+
+        hmc = db.get_methylation("fiber_a", "chr1", mod_type="5hmC", sample="d0")
+        assert hmc["positions"].tolist() == [150]
+
+        msp = db.get_msp("fiber_b", "chr1", sample="d0")
+        assert msp["starts"].tolist() == [705]
+
+
+def test_write_chrom_data_skips_absent_optional_layers(tmp_path):
+    builder = _make_builder(tmp_path)
+    nuc_df, fiber_meta, *_ = _assembly_inputs()
+    data = builder.assemble_chromosome_data("chr1", fiber_meta, nuc_df)
+
+    db_path = tmp_path / "nuc_only.h5"
+    with h5py.File(db_path, "w") as hf:
+        sample = hf.create_group("d0")
+        builder._write_chrom_data(sample, "chr1", data)
+        builder._build_indices(sample, "chr1", data)
+
+        assert "nucleosomes" in sample["chr1"]
+        assert "nucleosomes_slices" in sample["chr1/_indices"]
+        assert "5mC" not in sample["chr1"]
+        assert "5hmC" not in sample["chr1"]
+        assert "6mA" not in sample["chr1"]
+        assert "msp" not in sample["chr1"]
+
+
+def test_build_database_end_to_end_from_extracted_files(tmp_path):
+    """Tiny end-to-end build from extracted-style inputs, then query the result."""
+    nuc_path = _write(
+        tmp_path,
+        "nuc.csv",
+        "\n".join([
+            "chrom,read_id,nuc_start,nuc_end,width,linker_dist",
+            "chr1,fiber_a,100,180,80,",
+            "chr1,fiber_a,220,300,80,40",
+            "chr1,fiber_b,500,650,150,",
+            "chr2,fiber_c,1000,1150,150,",
+        ]) + "\n",
+    )
+    mods_path = _write(tmp_path, "raw_mods.tsv", _MODKIT_TEXT)
+    ma_path = _write(tmp_path, "6ma.bed", _BED12_6MA_TEXT)
+    msp_path = _write(tmp_path, "msp.bed", _BED12_MSP_TEXT)
+    anno_path = _write(
+        tmp_path,
+        "master.bed",
+        "\n".join([
+            "chr1\t90\t320\tCGI_1",
+            "chr1\t450\t700\tCGI_2",
+            "chr2\t950\t1200\tEnhancer_1",
+        ]) + "\n",
+    )
+
+    cfg = Config.model_validate({
+        "output_dir": str(tmp_path / "out"),
+        "output_file": "built.h5",
+        "samples": [
+            {
+                "name": "d0",
+                "layers": {
+                    "nucleosomes": str(nuc_path),
+                    "5mC": str(mods_path),
+                    "5hmC": str(mods_path),
+                    "6mA": str(ma_path),
+                    "msp": str(msp_path),
+                },
+            }
+        ],
+        "annotations": {"master": str(anno_path)},
+        "parameters": {"methylation_threshold": 0.5, "min_msp_size": 10},
+    })
+
+    build_database(cfg)
+
+    assert cfg.output_path.exists()
+    with h5py.File(cfg.output_path, "r") as hf:
+        assert "d0/chr1/fiber_id_table" in hf
+        assert "d0/chr1/_indices/nucleosomes_slices" in hf
+        assert "d0/fiber_lookup/fiber_ids" in hf
+        assert "annotations/master/features/CGI" in hf
+        assert hf["metadata"].attrs["methylation_threshold"] == 0.5
+
+    with FiberDatabase(cfg.output_path) as db:
+        assert db.samples == ["d0"]
+        assert db.list_annotations() == ["CGI", "Enhancer"]
+        assert db.get_chromosomes("d0") == ["chr1", "chr2"]
+
+        fiber_a_nuc = db.get_nucleosomes("fiber_a", "chr1", sample="d0")
+        assert fiber_a_nuc["starts"].tolist() == [100, 220]
+
+        fiber_a_mc = db.get_methylation("fiber_a", "chr1", sample="d0")
+        assert fiber_a_mc["positions"].tolist() == [100, 200]
+        assert fiber_a_mc["is_methylated"].tolist() == [True, False]
+
+        df = db.query_annotation_fast("CGI", sample="d0", max_regions=1)
+        assert set(df["fiber_id"]) == {"fiber_a"}
+        assert df.iloc[0]["n_nucleosomes"] == 2
