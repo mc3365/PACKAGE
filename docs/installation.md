@@ -4,19 +4,23 @@
 
 - Python ≥ 3.10
 - Linux or macOS (Windows untested)
+- An aligned, coordinate-sorted ONT BAM containing MM/ML modification tags
 
 ## From source (recommended during development)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/PACKAGE.git
+git clone https://github.com/mc3365/PACKAGE.git
 cd PACKAGE
-pip install -e ".[dev]"
+conda env create -f environments/ont.yml
+conda activate package-ont
+pip install -e ".[dev,viz]"
 ```
 
 The `-e` flag is for *editable* install: changes to the source take effect without
 reinstalling.
 
-The `[dev]` extras include pytest, ruff, and mypy.
+This installs the versions validated on HPC: samtools 1.22.1, modkit 0.5.0, and
+fibertools-rs 0.8.0. The `[viz]` extra installs Matplotlib.
 
 ## Verify the install
 
@@ -29,10 +33,12 @@ Both commands should succeed.
 
 ## On an HPC cluster
 
-If you don't have admin rights, use a virtualenv or conda environment:
+If your cluster already provides these tools in a separate environment, install the
+Python package in your analysis environment and put the ONT tool binaries on `PATH`:
 
 ```bash
-python -m venv ~/PACKAGE_env
-source ~/PACKAGE_env/bin/activate
-pip install -e ".[dev]"
+export PATH=/path/to/ont_env/bin:$PATH
+pip install -e ".[dev,viz]"
 ```
+
+Absolute executable paths can also be set under `extraction` in the YAML config.

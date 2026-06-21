@@ -8,12 +8,11 @@ authors:
     family-names: Cui
     email: meiying.cui@yale.edu
     affiliation: Yale University
-repository-code: 'https://github.com/YOUR_USERNAME/PACKAGE'
+repository-code: 'https://github.com/mc3365/PACKAGE'
 abstract: >-
   PACKAGE is a modular Python framework for single-molecule epigenomic analysis
-  of long-read Fiber-seq data from Oxford Nanopore and PacBio platforms. It provides
-  HDF5-backed storage with spatial indexing and analytical modules for methylation
-  entropy, nucleosome heterogeneity, and co-occurrence analysis at single-molecule
+  of Oxford Nanopore long-read data. It provides validated extraction orchestration,
+  HDF5-backed storage, regional queries, and visualization at single-molecule
   resolution.
 keywords:
   - fiber-seq
@@ -23,5 +22,5 @@ keywords:
   - nucleosome positioning
   - dna methylation
 license: MIT
-version: 0.1.0
-date-released: '2026-05-22'
+version: 0.4.0
+date-released: '2026-06-21'

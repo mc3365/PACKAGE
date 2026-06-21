@@ -1,0 +1,11 @@
+name: package-ont
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.12
+  - pip
+  - samtools=1.22.1
+  - ont-modkit=0.5.0
+  - fibertools-rs=0.8.0
+

@@ -1,7 +1,7 @@
 site_name: PACKAGE
 site_description: Single-molecule epigenomic analysis for long-read Fiber-seq data
-repo_url: https://github.com/YOUR_USERNAME/PACKAGE
-repo_name: YOUR_USERNAME/PACKAGE
+repo_url: https://github.com/mc3365/PACKAGE
+repo_name: mc3365/PACKAGE
 
 theme:
   name: material

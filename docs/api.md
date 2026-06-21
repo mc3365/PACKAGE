@@ -16,17 +16,17 @@ API docs are auto-generated from docstrings via `mkdocstrings`.
     options:
       show_source: false
 
-## Analysis modules
+## ONT extraction
 
-::: PACKAGE.analysis.basic_features
+::: PACKAGE.extract.ont
+    options:
+      show_source: false
 
-::: PACKAGE.analysis.entropy
+## Visualization
 
-::: PACKAGE.analysis.nucleosome
-
-::: PACKAGE.analysis.cooccurrence
-
-::: PACKAGE.analysis.fire_peaks
+::: PACKAGE.viz.single_molecule
+    options:
+      show_source: false
 
 ## Schema
 

@@ -1,0 +1,32 @@
+# Portable ONT template. Replace every /path/to value before running.
+output_dir: /path/to/output
+output_file: fiber_database.h5
+reference: /path/to/reference/genome.fa
+
+samples:
+  - name: sample1
+    bam: /path/to/sample1.fiberseq.bam
+    layers:
+      nucleosomes: /path/to/output/sample1_nuc_features.csv
+      "5mC": /path/to/output/sample1_raw_mods.tsv.gz
+      "5hmC": /path/to/output/sample1_raw_mods.tsv.gz
+      "6mA": /path/to/output/sample1_6ma.bed
+      msp: /path/to/output/sample1_msp.bed
+
+# Optional BED4 annotations can be added after extraction.
+annotations: {}
+
+parameters:
+  methylation_threshold: 0.5
+  min_msp_size: 10
+
+extraction:
+  threads: 16
+  overwrite: false
+  keep_nucleosome_bed: true
+  validate_bam: true
+  write_manifest: true
+  modkit_executable: modkit
+  ft_executable: ft
+  samtools_executable: samtools
+

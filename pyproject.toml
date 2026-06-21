@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "PACKAGE"
-version = "0.1.0"
-description = "Single-molecule epigenomic analysis for long-read Fiber-seq data (ONT and PacBio)"
+version = "0.4.0"
+description = "Single-molecule epigenomic analysis for Oxford Nanopore long-read data"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -21,7 +21,6 @@ keywords = [
     "dna-methylation",
     "chromatin-accessibility",
     "oxford-nanopore",
-    "pacbio",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -52,6 +51,7 @@ dependencies = [
 [project.optional-dependencies]
 # Development extras: install via `pip install -e ".[dev]"`
 dev = [
+    "matplotlib>=3.7",
     "pytest>=7.4",
     "pytest-cov>=4.1",
     "ruff>=0.1.0",         # linter + formatter, replaces black+flake8+isort
@@ -68,12 +68,15 @@ notebooks = [
     "matplotlib>=3.7",
     "seaborn>=0.12",
 ]
+viz = [
+    "matplotlib>=3.7",
+]
 
 [project.urls]
-Homepage = "https://github.com/YOUR_USERNAME/PACKAGE"
-Repository = "https://github.com/YOUR_USERNAME/PACKAGE"
-Issues = "https://github.com/YOUR_USERNAME/PACKAGE/issues"
-Documentation = "https://YOUR_USERNAME.github.io/PACKAGE"
+Homepage = "https://github.com/mc3365/PACKAGE"
+Repository = "https://github.com/mc3365/PACKAGE"
+Issues = "https://github.com/mc3365/PACKAGE/issues"
+Documentation = "https://mc3365.github.io/PACKAGE"
 
 # CLI entry point: after `pip install`, users can type `PACKAGE` in the terminal.
 [project.scripts]

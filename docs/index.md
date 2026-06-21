@@ -1,6 +1,6 @@
 # PACKAGE
 
-Single-molecule epigenomic analysis for long-read Fiber-seq data.
+Single-molecule epigenomic analysis for ONT long-read Fiber-seq data.
 
 ## Overview
 
@@ -10,10 +10,13 @@ Single-molecule epigenomic analysis for long-read Fiber-seq data.
 - 6mA-mediated chromatin accessibility
 - Nucleosome positioning
 
-...on individual long reads from Oxford Nanopore (ONT) and PacBio Fiber-seq experiments.
+...on individual Oxford Nanopore (ONT) long reads.
 
 The package uses an HDF5-backed storage layer with spatial indexing for genome-scale
 per-molecule queries.
+
+ONT extraction, database building, regional queries, and visualization are available.
+PacBio extraction is planned for a later release.
 
 ## See also
 
