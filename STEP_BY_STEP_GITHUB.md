@@ -1,149 +1,282 @@
-# Setting up `PACKAGE` on your laptop and GitHub — quick guide
+# Step-by-step ONT workflow
 
-This guide gets the skeleton onto your laptop, installs it, and pushes it to a new
-private GitHub repo. You'll do most of this through **Claude Code** running locally, so
-this guide is short — the heavy lifting is interactive.
+This guide starts with an aligned Oxford Nanopore BAM and ends with a queryable
+PACKAGE database and a single-molecule regional plot. It follows the workflow tested
+with the d0 and d4 mouse embryonic stem-cell data.
 
-Estimated time: **30-60 minutes**, depending on how much is already installed.
+PACKAGE currently supports ONT extraction. PacBio extraction is planned but is not
+part of this guide.
 
----
+## 1. Clone the repository
 
-## Step 0 — One-time prerequisites
-
-Before starting, make sure you have:
-
-- [ ] **Miniconda installed** on your laptop. Download from
-      https://docs.conda.io/en/latest/miniconda.html and follow the installer. ~5 min.
-- [ ] **Git installed.** Check with `git --version`. macOS usually has it via Xcode
-      Command Line Tools. Linux: `apt install git` or similar.
-- [ ] **Claude Code installed** on your laptop. See https://claude.com/claude-code
-      for install instructions. Run `claude --version` to verify.
-- [ ] **GitHub account.** You said you have this.
-
-You do **not** need to set up GitHub SSH keys ahead of time — Claude Code will help
-with that when needed.
-
----
-
-## Step 1 — Unpack the skeleton
-
-The skeleton folder I gave you is currently named `PACKAGE`. Move it to wherever you
-want to keep code projects on your laptop (e.g. `~/projects/`):
+Choose a directory where you keep code projects, then clone PACKAGE:
 
 ```bash
-# Adjust paths as needed
-mv ~/Downloads/PACKAGE /Users/cmy324/Desktop/analysis/git/fiberforge/PACKAGE
-cd /Users/cmy324/Desktop/analysis/git/fiberforge/PACKAGE
+git clone https://github.com/mc3365/PACKAGE.git
+cd PACKAGE
 ```
 
----
-
-## Step 2 — Pick a name (optional, can defer)
-
-Throughout the code, the placeholder name `PACKAGE` is used. You can keep this for now
-and rename later when you've decided. To rename:
+To update an existing clone:
 
 ```bash
-# Replace PACKAGE everywhere
-find . -type f \( -name "*.py" -o -name "*.toml" -o -name "*.md" -o -name "*.yml" \
-    -o -name "*.yaml" -o -name "*.cff" \) -not -path "./.venv/*" -exec \
-    sed -i.bak 's/PACKAGE/your_chosen_name/g' {} +
-
-# Rename the package directory
-mv src/PACKAGE src/your_chosen_name
-
-# Clean up backup files sed created
-find . -name "*.bak" -delete
+git checkout main
+git pull --ff-only
 ```
 
-I recommend keeping `PACKAGE` for now and renaming once you're sure of the name.
+## 2. Install PACKAGE and the ONT tools
 
----
+The supplied Conda environment includes the versions used during validation:
 
-## Step 3 — Hand off to Claude Code
+- samtools 1.22.1
+- modkit 0.5.0
+- fibertools-rs 0.8.0
 
-Open a terminal in the `PACKAGE` folder and start Claude Code:
+Create the environment and install PACKAGE:
 
 ```bash
-cd ~/projects/PACKAGE
-claude
+conda env create -f environments/ont.yml
+conda activate package-ont
+pip install -e ".[viz]"
 ```
 
-Then paste this initial prompt to give Claude Code the context:
+Confirm that the command-line tools are available:
 
-> I have a Python package skeleton in this directory generated from a previous chat.
-> I need help setting it up locally and pushing to a new private GitHub repo. Please:
->
-> 1. Create a fresh conda environment with Python 3.11 named `PACKAGE_env`
-> 2. Activate it and install the package with `pip install -e ".[dev]"`
-> 3. Verify the install by running `PACKAGE --version` and `pytest`
-> 4. If anything fails, debug it
-> 5. Once tests pass, help me create a new **private** GitHub repository named
->    `PACKAGE` and push this code to it
-> 6. Verify GitHub Actions CI runs and passes on the first commit
->
-> The skeleton follows the standard src-layout. Tests should all pass already (they
-> test placeholder functionality). After this step the package will have stub modules
-> ready to be filled in.
+```bash
+PACKAGE --version
+samtools --version | head -1
+modkit --version
+ft --version
+```
 
-Claude Code will walk you through it step by step. It will:
+On an HPC system, the Python package and ONT tools may live in separate environments.
+In that case, set `modkit_executable`, `ft_executable`, and `samtools_executable` in
+the YAML configuration to their absolute paths.
 
-- Run installs and report progress
-- Show you errors if anything breaks, then propose fixes
-- Walk you through GitHub auth setup if needed (SSH key or personal access token)
-- Help create the repo and push
-- Confirm CI ran successfully
+## 3. Check the input BAM
 
----
+The input BAM must:
 
-## Step 4 — Verify CI passed
+- be aligned and coordinate sorted;
+- have a BAM index (`.bai`);
+- use chromosome names compatible with the reference FASTA; and
+- contain paired MM and ML modification tags.
 
-After pushing, open the repo on github.com in your browser:
+PACKAGE checks these requirements before extraction. Basic checks can also be run
+directly:
 
-1. Go to **Actions** tab
-2. You should see one workflow run for the initial commit
-3. It will run a matrix of 2 jobs (Python 3.10 and 3.12 on Ubuntu)
-4. Both should complete with a green checkmark within ~3 minutes
+```bash
+samtools quickcheck sample.bam
+samtools view -H sample.bam | grep '^@HD'
+samtools view sample.bam | head -1
+```
 
-If anything goes red, copy the error log and ask Claude Code to fix it.
+The BAM and reference FASTA must describe the same genome assembly. For the validated
+mouse workflow, the reference path was an mm10 FASTA.
 
----
+## 4. Prepare the configuration
 
-## Step 5 — You're done with Phase 1
+Make a project-specific copy of the ONT template:
 
-You now have:
+```bash
+cp configs/ont_template.yaml configs/my_ont.yaml
+```
 
-- ✅ A working local install on your laptop
-- ✅ A private GitHub repository with the skeleton
-- ✅ CI passing on every push
-- ✅ A scaffold ready to fill in module by module
+Edit these fields in `configs/my_ont.yaml`:
 
-Come back to the main conversation (or continue with Claude Code) when you're ready
-for **Phase 2: porting the database query API**. That's where we start filling in
-real code, starting from your existing `fiber_database_v8.py`.
+- `output_dir`: directory for the HDF5 database;
+- `output_file`: HDF5 filename;
+- `reference`: reference FASTA used for alignment;
+- `samples[].name`: short, unique sample name;
+- `samples[].bam`: aligned, modification-tagged BAM;
+- `samples[].layers`: paths for the extraction outputs; and
+- `extraction`: threads, overwrite behavior, and executable paths.
 
----
+The 5mC and 5hmC entries must point to the same modkit TSV because both call types are
+stored in that file. Keep `methylation_threshold: 0.5` to reproduce the validated
+binarization rule. Raw probabilities are also retained in the HDF5 database.
 
-## Troubleshooting (if Claude Code can't fix it interactively)
+For a second sample, add another item under `samples` with its own BAM and output
+paths. Sample names become top-level groups in the database.
 
-**`claude` command not found**
+## 5. Run a small extraction test
 
-You haven't installed Claude Code yet. See https://claude.com/claude-code.
+Before processing a full BAM, it is useful to test a small genomic interval. This
+checks the environment, reference, BAM tags, and output paths at low cost:
 
-**`conda` command not found after install**
+```bash
+samtools view -@ 4 -h -b sample.bam chr1:3000000-5000000 \
+  | samtools sort -@ 4 -o sample_test.bam
+samtools index sample_test.bam
+samtools view -c sample_test.bam
+```
 
-You may need to close and reopen your terminal, or run `source ~/.bashrc`
-(or `~/.zshrc` on macOS).
+Create a second YAML file that points to `sample_test.bam` and writes to a separate
+test directory. Then run:
 
-**Permission denied (publickey) when pushing to GitHub**
+```bash
+PACKAGE extract \
+  --platform ont \
+  --config configs/ont_smoke_test.yaml \
+  --samples sample_test
+```
 
-Either set up SSH keys (https://docs.github.com/en/authentication/connecting-to-github-with-ssh)
-or use the HTTPS URL with a personal access token
-(https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
-Claude Code can walk you through either path.
+Successful extraction produces:
 
-**GitHub Actions failing**
+- a shared modkit TSV for 5mC and 5hmC;
+- BED output for 6mA;
+- BED output for MSPs;
+- a flattened nucleosome CSV; and
+- `PACKAGE_manifest_<sample>.json` with BAM QC, tool versions, commands, and output
+  sizes.
 
-If CI is red, click into the failing job on GitHub, copy the error log, and paste it
-into Claude Code. Most likely cause for first-time CI failures is a Python version or
-dependency issue that we can fix in `pyproject.toml`.
+Inspect the manifest before continuing:
+
+```bash
+python -m json.tool /path/to/PACKAGE_manifest_sample_test.json | less
+```
+
+## 6. Extract the full samples
+
+Run full extraction on a compute node or submit it as a Slurm job. To process every
+sample in the YAML:
+
+```bash
+PACKAGE extract --platform ont --config configs/my_ont.yaml
+```
+
+To process selected samples, repeat `--samples`:
+
+```bash
+PACKAGE extract \
+  --platform ont \
+  --config configs/my_ont.yaml \
+  --samples d0 \
+  --samples d4
+```
+
+With `overwrite: false`, valid existing outputs are reused. Set `overwrite: true` only
+when the extraction products should be regenerated.
+
+## 7. Build the HDF5 database
+
+Run the unit tests before a full build when developing from a Git checkout:
+
+```bash
+python -m pytest tests/test_utils.py tests/test_builder.py -q
+```
+
+Build every configured sample:
+
+```bash
+PACKAGE build --config configs/my_ont.yaml
+```
+
+The builder creates `output_dir/output_file`. It opens that path for writing, so use a
+new filename or preserve the previous HDF5 file before rebuilding.
+
+Inspect the completed database:
+
+```bash
+PACKAGE info /path/to/output/fiber_database.h5
+ls -lh /path/to/output/fiber_database.h5
+```
+
+Confirm that the expected samples and annotations appear and that the fiber counts are
+consistent with the extraction inputs.
+
+## 8. Query a region
+
+Use the command line for a quick overlap check:
+
+```bash
+PACKAGE query \
+  --db /path/to/output/fiber_database.h5 \
+  --region chr1:3000000-5000000 \
+  --sample d0
+```
+
+For repeated regional analysis, create the spatial index once:
+
+```python
+from PACKAGE.db import FiberDatabase
+
+with FiberDatabase("/path/to/output/fiber_database.h5", build_index=True) as db:
+    print(db.get_summary())
+```
+
+The index is saved beside the HDF5 database and loaded by later sessions.
+
+## 9. Plot individual molecules
+
+The example plot shows nucleosomes, MSPs, and one modification layer across fibers
+overlapping a region:
+
+```bash
+python examples/ont_region_plot.py \
+  --db /path/to/output/fiber_database.h5 \
+  --region chr1:3000000-3050000 \
+  --sample d0 \
+  --layer 5mC \
+  --max-fibers 100 \
+  --out d0_chr1_region.png
+```
+
+Use a focused interval, usually 10-50 kb, so individual molecular patterns remain
+readable. The same command accepts `5hmC` or `6mA` as the modification layer.
+
+## 10. Verify a development checkout
+
+Contributors should install the development dependencies and run the complete checks:
+
+```bash
+pip install -e ".[dev,viz]"
+python -m pytest -q
+python -m ruff check src tests examples
+```
+
+GitHub Actions runs the automated tests after each push. The local checks should pass
+before changes are committed.
+
+## Troubleshooting
+
+### `conda: command not found`
+
+Initialize Conda for the current shell or use the full path to the environment's
+executables. On batch systems, shell startup files may not be loaded by Slurm.
+
+### An executable is not found
+
+Activate the ONT environment, add its `bin` directory to `PATH`, or set the three
+executable paths explicitly in the YAML configuration.
+
+### `gzip.BadGzipFile`
+
+Some older extraction outputs have a `.gz` suffix but contain plain text. PACKAGE can
+read both forms, but new modkit outputs should be checked with:
+
+```bash
+file sample_raw_mods.tsv.gz
+gzip -t sample_raw_mods.tsv.gz
+```
+
+### Region queries report that no spatial index was found
+
+The database is still usable, but queries fall back to an array scan. Open the database
+once with `build_index=True` as shown in Step 8.
+
+### GitHub authentication fails
+
+Refresh the GitHub CLI login, then retry the push:
+
+```bash
+gh auth login -h github.com
+git push
+```
+
+## Development history
+
+PACKAGE began as a Python package skeleton and was filled in against the most recent
+legacy V8 scripts. The database reader was first checked for output parity, followed by
+the builder and then the ONT extraction workflow. Real d0 and d4 data were used to
+validate the HDF5 build, regional queries, modification binarization, BAM QC, manifests,
+and extraction outputs. The validated ONT milestone is tagged `v0.4.0-ont`.

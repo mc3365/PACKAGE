@@ -66,7 +66,8 @@ with FiberDatabase("fiber_database.h5") as db:
     fig.savefig("ont_region.png", dpi=200)
 ```
 
-See [`examples/`](examples/) for tutorial notebooks.
+See the [step-by-step ONT workflow](STEP_BY_STEP_GITHUB.md) and
+[`examples/`](examples/) for complete usage examples.
 
 ## Supported platforms
 
