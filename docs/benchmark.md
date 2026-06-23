@@ -19,6 +19,7 @@ python -m PACKAGE.benchmark.ont \
   --n-regions 25 \
   --repeats 3 \
   --seed 3365 \
+  --query-modes spatial_index \
   --build-index
 ```
 
@@ -37,6 +38,10 @@ window sizes, with three timed repeats. Every selected region receives one untim
 warm-up query. This avoids mixing one-time HDF5 and fiber-ID initialization costs into
 the regional-query measurements.
 
+For full production databases, use `--query-modes spatial_index`. The array-scan mode
+is useful as a correctness and baseline comparison on small databases, but it can take
+many hours when repeated across millions of fibers.
+
 ## Outputs
 
 - `storage_summary.json`: HDF5 size, spatial-index size, annotations, and per-sample
@@ -50,8 +55,9 @@ the regional-query measurements.
 - `query_speed.png`: raster preview; and
 - `query_speed.pdf`: vector figure for the manuscript.
 
-When a spatial index is available, the same regions are measured with both the array
-scan and spatial index. If no index is loaded, only the array scan is reported.
+By default, when a spatial index is available, the same regions are measured with both
+the array scan and spatial index. Use `--query-modes spatial_index` or
+`--query-modes array_scan` to select a subset.
 
 ## Reporting
 

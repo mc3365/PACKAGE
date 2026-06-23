@@ -51,3 +51,25 @@ def test_query_speed_benchmark_writes_raw_summary_and_plots(
     assert (output_dir / "query_speed_metadata.json").stat().st_size > 0
     assert (output_dir / "query_speed.png").stat().st_size > 0
     assert (output_dir / "query_speed.pdf").stat().st_size > 0
+
+
+def test_query_speed_benchmark_can_run_spatial_index_only(
+    tiny_db_path_with_layers, tmp_path
+):
+    output_dir = tmp_path / "query_spatial_only"
+    with FiberDatabase(tiny_db_path_with_layers, build_index=True) as db:
+        rows = run_query_speed_benchmark(
+            db,
+            output_dir,
+            sample="d0",
+            region_sizes_kb=[1],
+            n_regions=2,
+            repeats=1,
+            seed=7,
+            query_modes=["spatial_index"],
+        )
+
+    assert len(rows) == 2
+    assert {row["mode"] for row in rows} == {"spatial_index"}
+    metadata = json.loads((output_dir / "query_speed_metadata.json").read_text())
+    assert metadata["requested_modes"] == ["spatial_index"]

@@ -22,6 +22,16 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--seed", type=int, default=3365)
     parser.add_argument(
+        "--query-modes",
+        nargs="+",
+        choices=["array_scan", "spatial_index"],
+        default=["array_scan", "spatial_index"],
+        help=(
+            "query implementations to benchmark; use 'spatial_index' alone for "
+            "large production databases"
+        ),
+    )
+    parser.add_argument(
         "--build-index",
         action="store_true",
         help="build and save the spatial index before benchmarking",
@@ -38,10 +48,10 @@ def main() -> None:
             n_regions=args.n_regions,
             repeats=args.repeats,
             seed=args.seed,
+            query_modes=args.query_modes,
         )
     print(f"Wrote ONT benchmark outputs to {args.outdir}")
 
 
 if __name__ == "__main__":
     main()
-

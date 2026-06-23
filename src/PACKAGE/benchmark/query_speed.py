@@ -111,12 +111,15 @@ def run_query_speed_benchmark(
     n_regions: int = 25,
     repeats: int = 3,
     seed: int = 3365,
+    query_modes: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Benchmark array-scan and available spatial-index region queries.
 
     Regions are centered on reproducibly sampled fibers so every timed query overlaps
-    real data. Each selected region is queried ``repeats`` times. The function always
-    benchmarks the array scan and adds the spatial-index mode when an index is loaded.
+    real data. Each selected region is queried ``repeats`` times. By default, the
+    function benchmarks the array scan and adds the spatial-index mode when an index is
+    loaded. Large production databases can request only ``spatial_index`` to avoid
+    hundreds of intentionally slow full-array scans.
 
     Outputs:
         ``query_speed_results.csv``
@@ -133,6 +136,11 @@ def run_query_speed_benchmark(
     region_sizes_kb = region_sizes_kb or [1, 10, 100, 1000]
     if any(size < 1 for size in region_sizes_kb):
         raise ValueError("region sizes must be positive integers in kb")
+    query_modes = query_modes or ["array_scan", "spatial_index"]
+    allowed_modes = {"array_scan", "spatial_index"}
+    unknown_modes = sorted(set(query_modes) - allowed_modes)
+    if unknown_modes:
+        raise ValueError(f"Unknown query mode(s): {unknown_modes}; expected {sorted(allowed_modes)}")
     sample = sample or db.samples[0]
     if sample not in db.samples:
         raise ValueError(f"Unknown sample {sample!r}; available: {db.samples}")
@@ -143,30 +151,42 @@ def run_query_speed_benchmark(
     regions = _fiber_centered_regions(db, sample, sizes_bp, n_regions, seed)
 
     original_index = db._spatial_index
-    modes: list[tuple[str, dict[str, Any]]] = [("array_scan", {})]
-    if sample in original_index and original_index[sample]:
+    modes: list[tuple[str, dict[str, Any]]] = []
+    if "array_scan" in query_modes:
+        modes.append(("array_scan", {}))
+    if "spatial_index" in query_modes and sample in original_index and original_index[sample]:
         modes.append(("spatial_index", original_index))
+    if "spatial_index" in query_modes and not any(mode == "spatial_index" for mode, _ in modes):
+        raise ValueError(
+            "Spatial-index mode requested, but no spatial index is loaded for "
+            f"sample {sample!r}. Re-run with --build-index or omit spatial_index."
+        )
+    if not modes:
+        raise ValueError("No query modes are available to benchmark")
 
     result_rows: list[dict[str, Any]] = []
     reference_counts: dict[tuple[int, int], int] = {}
     try:
         for mode, index in modes:
+            print(f"Benchmarking query mode: {mode}", flush=True)
             db._spatial_index = index
             # Warm every selected region once. OS-level cold-cache control requires
             # administrative privileges and is not portable across HPC systems.
             for size in sizes_bp:
+                print(f"  Warming {size // 1000} kb regions", flush=True)
                 for region_number, (chrom, start, end) in enumerate(regions[size], 1):
                     count = len(db.get_fibers_at(chrom, start, end, sample=sample))
                     key = (size, region_number)
                     if mode == "array_scan":
                         reference_counts[key] = count
-                    elif count != reference_counts[key]:
+                    elif key in reference_counts and count != reference_counts[key]:
                         raise RuntimeError(
                             "Spatial index and array scan disagree for "
                             f"{chrom}:{start}-{end}: {count} != {reference_counts[key]}. "
                             "Rebuild the spatial index before benchmarking."
                         )
             for size in sizes_bp:
+                print(f"  Timing {size // 1000} kb regions", flush=True)
                 for region_number, (chrom, start, end) in enumerate(regions[size], 1):
                     for repeat in range(1, repeats + 1):
                         began = time.perf_counter()
@@ -226,6 +246,7 @@ def run_query_speed_benchmark(
         "database_size_bytes": db.db_path.stat().st_size,
         "sample": sample,
         "modes": [mode for mode, _ in modes],
+        "requested_modes": query_modes,
         "region_sizes_kb": region_sizes_kb,
         "n_regions_per_size": n_regions,
         "repeats_per_region": repeats,
