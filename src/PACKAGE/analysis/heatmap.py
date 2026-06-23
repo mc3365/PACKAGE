@@ -67,6 +67,21 @@ def _gaussian_kernel(sigma: float) -> np.ndarray:
     return kernel / kernel.sum()
 
 
+def _same_length_convolve(values: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    """Convolve while preserving the length of ``values`` even for short vectors."""
+    smoothed = np.convolve(values, kernel, mode="same")
+    target = len(values)
+    if len(smoothed) == target:
+        return smoothed
+    if len(smoothed) > target:
+        extra = len(smoothed) - target
+        left = extra // 2
+        return smoothed[left:left + target]
+    pad_left = (target - len(smoothed)) // 2
+    pad_right = target - len(smoothed) - pad_left
+    return np.pad(smoothed, (pad_left, pad_right), mode="edge")
+
+
 def smooth_methylation(values: np.ndarray, sigma: float = MET_SMOOTHING_SIGMA) -> np.ndarray:
     """Gaussian-smooth a methylation vector while preserving all-NaN positions."""
     values = values.astype(np.float64)
@@ -77,7 +92,7 @@ def smooth_methylation(values: np.ndarray, sigma: float = MET_SMOOTHING_SIGMA) -
     if nan_mask.any():
         valid = np.where(~nan_mask)[0]
         filled[nan_mask] = np.interp(np.where(nan_mask)[0], valid, filled[valid])
-    smoothed = np.convolve(filled, _gaussian_kernel(sigma), mode="same")
+    smoothed = _same_length_convolve(filled, _gaussian_kernel(sigma))
     smoothed[nan_mask] = np.nan
     return smoothed
 

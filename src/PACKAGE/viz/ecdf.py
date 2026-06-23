@@ -39,7 +39,7 @@ def _plot_ecdf_set(
     samples = list(dict.fromkeys(df["sample"].astype(str)))
     colors = ["#3b6fb6", "#c74f46", "#2f8f6b", "#8d63b8", "#8a7a2f"]
     nrows = (len(columns) + ncols - 1) // ncols
-    fig, axes = plt.subplots(nrows, ncols, figsize=(3.3 * ncols, 2.8 * nrows), squeeze=False)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(3.4 * ncols, 3.0 * nrows), squeeze=False)
     for ax, (column, label) in zip(axes.ravel(), columns.items(), strict=False):
         for sample, color in zip(samples, colors, strict=False):
             values = df.loc[df["sample"].astype(str) == sample, column].dropna().sort_values()
@@ -57,10 +57,17 @@ def _plot_ecdf_set(
     for ax in axes[-1, :]:
         ax.set_xlabel(xlabel)
     handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.suptitle(title, y=0.99, fontsize=13)
     if handles:
-        fig.legend(handles, labels, loc="upper center", ncols=min(len(samples), 4), frameon=False)
-    fig.suptitle(title)
-    fig.tight_layout(rect=(0, 0, 1, 0.92))
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.94),
+            ncols=min(len(samples), 4),
+            frameon=False,
+        )
+    fig.tight_layout(rect=(0, 0, 1, 0.86))
     return fig
 
 

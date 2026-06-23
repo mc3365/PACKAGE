@@ -7,6 +7,7 @@ import csv
 import numpy as np
 
 from PACKAGE.analysis import export_annotation_matrices, export_global_feature_fractions
+from PACKAGE.analysis.heatmap import smooth_methylation
 
 
 def test_export_global_feature_fractions_writes_expected_columns(
@@ -41,3 +42,13 @@ def test_export_annotation_matrices_writes_npz_outputs(tiny_db_path_with_layers,
     assert met_body.shape == (1, 1000)
     assert nuc_meta.shape == (1, 400)
     assert (tmp_path / "region_summary.csv").stat().st_size > 0
+
+
+def test_smooth_methylation_preserves_short_vector_length():
+    values = np.full(219, np.nan)
+    values[[10, 40, 100, 180]] = [0, 1, 0, 1]
+
+    smoothed = smooth_methylation(values, sigma=50)
+
+    assert len(smoothed) == len(values)
+    assert np.isnan(smoothed[np.isnan(values)]).all()
