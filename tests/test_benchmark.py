@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 
+from PACKAGE.benchmark.annotation import run_annotation_benchmark
 from PACKAGE.benchmark.query_speed import run_query_speed_benchmark
 from PACKAGE.benchmark.storage import run_storage_benchmark
 from PACKAGE.db import FiberDatabase
@@ -73,3 +74,27 @@ def test_query_speed_benchmark_can_run_spatial_index_only(
     assert {row["mode"] for row in rows} == {"spatial_index"}
     metadata = json.loads((output_dir / "query_speed_metadata.json").read_text())
     assert metadata["requested_modes"] == ["spatial_index"]
+
+
+def test_annotation_benchmark_times_real_annotation_query(
+    tiny_db_path_with_layers, tmp_path
+):
+    output_dir = tmp_path / "annotation"
+    rows = run_annotation_benchmark(
+        tiny_db_path_with_layers,
+        output_dir,
+        sample="d0",
+        annotations=["Typical_Enhancer"],
+        layers=["nucleosomes", "5mC"],
+        max_regions=1,
+        repeats=1,
+        warmups=0,
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["annotation"] == "Typical_Enhancer"
+    assert int(rows[0]["n_rows"]) > 0
+    assert (output_dir / "annotation_query_results.csv").stat().st_size > 0
+    assert (output_dir / "annotation_query_summary.csv").stat().st_size > 0
+    metadata = json.loads((output_dir / "annotation_query_metadata.json").read_text())
+    assert metadata["query_function"] == "FiberDatabase.query_annotation_fast"

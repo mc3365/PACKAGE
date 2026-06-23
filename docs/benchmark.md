@@ -66,6 +66,37 @@ raw CSV and metadata JSON with the manuscript analysis so the panel can be regen
 The benchmark measures warm-cache regional queries; it does not claim to measure
 first-access disk latency.
 
+## Annotation Query Benchmark
+
+Use the annotation benchmark for biologically meaningful workflows such as CGI,
+promoter, enhancer, or super-enhancer queries. This times
+`FiberDatabase.query_annotation_fast`: annotation class -> overlapping fibers ->
+per-fiber layer summaries.
+
+```bash
+python -m PACKAGE.benchmark.annotation \
+  --db /path/to/fiber_database.h5 \
+  --sample d0 \
+  --annotation CGI \
+  --layers nucleosomes 5mC 5hmC 6mA msp \
+  --max-regions 50 \
+  --repeats 3 \
+  --warmups 1 \
+  --outdir benchmark/d0_CGI
+```
+
+Repeat `--annotation` to benchmark more than one annotation class in the same run.
+Outputs are:
+
+- `annotation_query_results.csv`: one row per timed repeat;
+- `annotation_query_summary.csv`: median, quartiles, p95, and result-row counts; and
+- `annotation_query_metadata.json`: database, sample, layers, annotations, and run
+  settings.
+
+This benchmark is usually more interpretable for figures than random windows because
+it measures a real analysis pattern. The random-region benchmark remains useful for
+technical scaling across interval sizes.
+
 ## Full-build resources
 
 Full-build timing requires a new output HDF5 file. Copy the working YAML, change
