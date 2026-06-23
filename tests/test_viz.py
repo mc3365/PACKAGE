@@ -9,8 +9,14 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 
+from PACKAGE.analysis import export_annotation_matrices, export_global_feature_fractions
 from PACKAGE.db import FiberDatabase
-from PACKAGE.viz import single_molecule_heatmap
+from PACKAGE.viz import (
+    plot_annotation_heatmap,
+    plot_annotation_metaplot,
+    plot_feature_ecdfs,
+    single_molecule_heatmap,
+)
 
 
 def test_single_molecule_heatmap_renders_layers(tiny_db_path_with_layers, tmp_path):
@@ -51,3 +57,39 @@ def test_single_molecule_heatmap_validates_inputs(
     with FiberDatabase(tiny_db_path_with_layers) as db:
         with pytest.raises(ValueError, match=message):
             single_molecule_heatmap(db, "chr1", **kwargs)
+
+
+def test_feature_ecdf_plots_render(tiny_db_path_with_layers, tmp_path):
+    feature_csv = tmp_path / "features.csv"
+    export_global_feature_fractions(tiny_db_path_with_layers, feature_csv)
+
+    coverage_fig, base_fig = plot_feature_ecdfs(feature_csv)
+
+    assert len(coverage_fig.axes) >= 5
+    assert len(base_fig.axes) >= 3
+    plt.close(coverage_fig)
+    plt.close(base_fig)
+
+
+def test_annotation_matrix_plots_render(tiny_db_path_with_layers, tmp_path):
+    export_annotation_matrices(
+        tiny_db_path_with_layers,
+        tmp_path,
+        annotations=["CGI"],
+        samples=["d0"],
+        min_fibers=1,
+    )
+
+    heatmap = plot_annotation_heatmap(
+        tmp_path / "CGI_d0_nuc_body.npz",
+        tmp_path / "CGI_d0_met_body.npz",
+    )
+    metaplot = plot_annotation_metaplot(
+        tmp_path / "CGI_d0_nuc_metaplot.npz",
+        tmp_path / "CGI_d0_met_metaplot.npz",
+    )
+
+    assert len(heatmap.axes) >= 2
+    assert len(metaplot.axes) == 2
+    plt.close(heatmap)
+    plt.close(metaplot)

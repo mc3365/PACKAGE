@@ -8,6 +8,13 @@ Submodules:
     single_molecule  Per-molecule heatmap and related helpers
 """
 
+from PACKAGE.viz.annotation_matrix import plot_annotation_heatmap, plot_annotation_metaplot
+from PACKAGE.viz.ecdf import plot_feature_ecdfs
 from PACKAGE.viz.single_molecule import single_molecule_heatmap
 
-__all__ = ["single_molecule_heatmap"]
+__all__ = [
+    "plot_annotation_heatmap",
+    "plot_annotation_metaplot",
+    "plot_feature_ecdfs",
+    "single_molecule_heatmap",
+]

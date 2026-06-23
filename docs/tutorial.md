@@ -46,3 +46,29 @@ python examples/ont_region_plot.py \
 
 The figure shows each fiber as a row, with nucleosomes, MSP intervals, and base-level
 modification calls. Limit plots to focused regions and use `--max-fibers` for legibility.
+
+## Plot Summary Figures
+
+Global ECDF plots summarize per-fiber feature fractions for one or more samples:
+
+```bash
+python examples/ont_feature_ecdf.py \
+  --db /path/to/output/fiber_database.h5 \
+  --samples d0 d4 \
+  --outdir figures/ecdf
+```
+
+Annotation-centered heatmap/metaplot figures normalize each region body to fixed bins
+and add 2 kb flanks for the metaplot:
+
+```bash
+python examples/ont_annotation_heatmap.py \
+  --db /path/to/output/fiber_database.h5 \
+  --annotation CGI \
+  --sample d0 \
+  --max-regions 50 \
+  --outdir figures/CGI_d0
+```
+
+The heatmap export filters for fibers spanning at least 80% of the region, excludes
+regions over 50 kb, and requires at least 10 fibers by default.
