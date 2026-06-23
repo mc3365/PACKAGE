@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 _COVERAGE_COLUMNS = {
@@ -19,6 +20,17 @@ _BASE_COLUMNS = {
     "frac_5hmC_among_cpg": "5hmC among CpG",
     "frac_6mA_among_A": "6mA density proxy",
 }
+
+
+def _ecdf_xy(values: pd.Series, x_min: float = 0.0, x_max: float = 1.0) -> tuple[np.ndarray, np.ndarray]:
+    """Return x/y coordinates for an ECDF line that spans the full plot range."""
+    x = values.dropna().sort_values().to_numpy(dtype=float)
+    if len(x) == 0:
+        return np.array([], dtype=float), np.array([], dtype=float)
+    y = np.arange(1, len(x) + 1, dtype=float) / len(x)
+    x = np.concatenate([[x_min], x, [x_max]])
+    y = np.concatenate([[0.0], y, [1.0]])
+    return x, y
 
 
 def _plot_ecdf_set(
@@ -45,8 +57,8 @@ def _plot_ecdf_set(
             values = df.loc[df["sample"].astype(str) == sample, column].dropna().sort_values()
             if values.empty:
                 continue
-            y = (values.rank(method="first").to_numpy()) / len(values)
-            ax.step(values.to_numpy(), y, where="post", color=color, linewidth=1.2, label=sample)
+            x, y = _ecdf_xy(values)
+            ax.step(x, y, where="post", color=color, linewidth=1.2, label=sample)
         ax.set_title(label)
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)

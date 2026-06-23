@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import matplotlib
+import pandas as pd
 import pytest
 
 matplotlib.use("Agg")
@@ -17,6 +18,7 @@ from PACKAGE.viz import (
     plot_feature_ecdfs,
     single_molecule_heatmap,
 )
+from PACKAGE.viz.ecdf import _ecdf_xy
 
 
 def test_single_molecule_heatmap_renders_layers(tiny_db_path_with_layers, tmp_path):
@@ -69,6 +71,15 @@ def test_feature_ecdf_plots_render(tiny_db_path_with_layers, tmp_path):
     assert len(base_fig.axes) >= 3
     plt.close(coverage_fig)
     plt.close(base_fig)
+
+
+def test_ecdf_coordinates_extend_to_full_fraction_range():
+    x, y = _ecdf_xy(pd.Series([0.01, 0.03, 0.2]))
+
+    assert x[0] == 0
+    assert x[-1] == 1
+    assert y[0] == 0
+    assert y[-1] == 1
 
 
 def test_annotation_matrix_plots_render(tiny_db_path_with_layers, tmp_path):
