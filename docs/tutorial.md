@@ -72,3 +72,19 @@ python examples/ont_annotation_heatmap.py \
 
 The heatmap export filters for fibers spanning at least 80% of the region, excludes
 regions over 50 kb, and requires at least 10 fibers by default.
+
+For fixed-window center/TSS plots, use the centered workflow. Pass the 9-column
+annotation BED when promoter/gene-body strand orientation should be respected:
+
+```bash
+python examples/ont_centered_heatmap.py \
+  --db /path/to/output/fiber_database.h5 \
+  --bed /path/to/master_annotations_v4.uniqueID.bed \
+  --annotation CGI \
+  --samples d0 d4 \
+  --max-regions 50 \
+  --outdir figures/CGI_center
+```
+
+This extracts a fixed window around the annotation midpoint, or around promoter TSS
+for promoter classes, and flips minus-strand directional regions before averaging.

@@ -6,7 +6,11 @@ import csv
 
 import numpy as np
 
-from PACKAGE.analysis import export_annotation_matrices, export_global_feature_fractions
+from PACKAGE.analysis import (
+    export_annotation_matrices,
+    export_centered_annotation_matrices,
+    export_global_feature_fractions,
+)
 from PACKAGE.analysis.heatmap import smooth_methylation
 
 
@@ -42,6 +46,28 @@ def test_export_annotation_matrices_writes_npz_outputs(tiny_db_path_with_layers,
     assert met_body.shape == (1, 1000)
     assert nuc_meta.shape == (1, 400)
     assert (tmp_path / "region_summary.csv").stat().st_size > 0
+
+
+def test_export_centered_annotation_matrices_writes_part2_style_outputs(
+    tiny_db_path_with_layers, tmp_path
+):
+    summary = export_centered_annotation_matrices(
+        tiny_db_path_with_layers,
+        tmp_path,
+        annotations=["Typical_Enhancer"],
+        samples=["d0"],
+        min_fibers=1,
+    )
+
+    assert len(summary) == 1
+    nuc = np.load(tmp_path / "Typical_Enhancer_d0_nuc.npz", allow_pickle=True)
+    met = np.load(tmp_path / "Typical_Enhancer_d0_met.npz", allow_pickle=True)
+    binned = np.load(tmp_path / "Typical_Enhancer_d0_met_binned.npz", allow_pickle=True)
+    assert nuc["matrix"].shape == (1, 5000)
+    assert met["matrix"].shape == (1, 5000)
+    assert binned["matrix"].shape == (1, 100)
+    assert int(nuc["extension_bp"]) == 2500
+    assert (tmp_path / "Typical_Enhancer_d0_metaplot.csv").stat().st_size > 0
 
 
 def test_smooth_methylation_preserves_short_vector_length():

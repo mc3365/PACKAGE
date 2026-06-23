@@ -11,10 +11,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from PACKAGE.analysis import export_annotation_matrices, export_global_feature_fractions
+from PACKAGE.analysis.heatmap import export_centered_annotation_matrices
 from PACKAGE.db import FiberDatabase
 from PACKAGE.viz import (
     plot_annotation_heatmap,
     plot_annotation_metaplot,
+    plot_centered_annotation_heatmap,
+    plot_centered_metaplot,
     plot_feature_ecdfs,
     single_molecule_heatmap,
 )
@@ -102,5 +105,30 @@ def test_annotation_matrix_plots_render(tiny_db_path_with_layers, tmp_path):
 
     assert len(heatmap.axes) >= 2
     assert len(metaplot.axes) == 2
+    plt.close(heatmap)
+    plt.close(metaplot)
+
+
+def test_centered_annotation_plots_render(tiny_db_path_with_layers, tmp_path):
+    export_centered_annotation_matrices(
+        tiny_db_path_with_layers,
+        tmp_path,
+        annotations=["Typical_Enhancer"],
+        samples=["d0"],
+        min_fibers=1,
+    )
+
+    heatmap = plot_centered_annotation_heatmap(
+        tmp_path / "Typical_Enhancer_d0_nuc.npz",
+        tmp_path / "Typical_Enhancer_d0_met.npz",
+    )
+    metaplot = plot_centered_metaplot(
+        {"d0": tmp_path / "Typical_Enhancer_d0_metaplot.csv"},
+        annotation="Typical_Enhancer",
+        extension_bp=2500,
+    )
+
+    assert len(heatmap.axes) >= 4
+    assert len(metaplot.axes) == 1
     plt.close(heatmap)
     plt.close(metaplot)

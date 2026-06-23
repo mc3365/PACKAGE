@@ -6,6 +6,8 @@ Runnable examples demonstrating common workflows.
 - `ont_feature_ecdf.py`: export global per-fiber feature fractions and save ECDF plots
 - `ont_annotation_heatmap.py`: export annotation-centered 5mC/nucleosome matrices
   and save heatmap/metaplot figures
+- `ont_centered_heatmap.py`: export fixed-window center/TSS matrices and save
+  paired heatmap/metaplot figures
 
 Install visualization dependencies before running:
 
@@ -14,4 +16,5 @@ pip install -e ".[viz]"
 python examples/ont_region_plot.py --help
 python examples/ont_feature_ecdf.py --help
 python examples/ont_annotation_heatmap.py --help
+python examples/ont_centered_heatmap.py --help
 ```
