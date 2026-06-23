@@ -59,3 +59,21 @@ Report the median and interquartile range rather than a single fastest run. Keep
 raw CSV and metadata JSON with the manuscript analysis so the panel can be regenerated.
 The benchmark measures warm-cache regional queries; it does not claim to measure
 first-access disk latency.
+
+## Full-build resources
+
+Full-build timing requires a new output HDF5 file. Copy the working YAML, change
+`output_file` to a benchmark-specific filename, and submit the instrumented job:
+
+```bash
+sbatch --export=ALL,\
+CONFIG=/absolute/path/configs/benchmark_ont.yaml,\
+PYTHON=/absolute/path/env/bin/python,\
+PACKAGE_ROOT=/absolute/path/PACKAGE \
+slurm/benchmark_full_build.sh
+```
+
+The job refuses to overwrite an existing database. It writes the raw GNU `time`
+report and a JSON report containing wall time, peak RSS, Slurm resources, Git commit,
+package version, final HDF5 size, and sample fiber counts. See `slurm/README.md` for
+the cluster workflow.
