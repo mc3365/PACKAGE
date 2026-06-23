@@ -171,14 +171,18 @@ Build every configured sample:
 PACKAGE build --config configs/my_ont.yaml
 ```
 
-The builder creates `output_dir/output_file`. It opens that path for writing, so use a
-new filename or preserve the previous HDF5 file before rebuilding.
+The builder creates `output_dir/output_file`. When `build.build_spatial_index: true`
+is set in the YAML, it also creates a cached spatial-index sidecar named
+`<output>.index.pkl` for fast region queries. Keep that file beside the HDF5 database.
+The builder opens the HDF5 path for writing, so use a new filename or preserve the
+previous HDF5 file before rebuilding.
 
 Inspect the completed database:
 
 ```bash
 PACKAGE info /path/to/output/fiber_database.h5
 ls -lh /path/to/output/fiber_database.h5
+ls -lh /path/to/output/fiber_database.index.pkl
 ```
 
 Confirm that the expected samples and annotations appear and that the fiber counts are

@@ -20,6 +20,9 @@ parameters:
   methylation_threshold: 0.5
   min_msp_size: 10
 
+build:
+  build_spatial_index: true
+
 extraction:
   threads: 16
   overwrite: false
@@ -29,4 +32,3 @@ extraction:
   modkit_executable: modkit
   ft_executable: ft
   samtools_executable: samtools
-

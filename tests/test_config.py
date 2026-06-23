@@ -45,7 +45,22 @@ def test_load_valid_config(tmp_path):
     assert cfg.extraction.overwrite is False
     assert cfg.extraction.validate_bam is True
     assert cfg.extraction.write_manifest is True
+    assert cfg.build.build_spatial_index is False
     assert cfg.output_path == tmp_path / "out" / "fibers.h5"
+
+
+def test_build_settings_are_typed_and_validated(tmp_path):
+    """Build settings should be recorded in the YAML schema."""
+    cfg_path = _write_yaml(
+        tmp_path / "build.yaml",
+        {
+            "output_dir": str(tmp_path),
+            "samples": [_minimal_sample_dict(tmp_path)],
+            "build": {"build_spatial_index": True},
+        },
+    )
+    cfg = load_config(cfg_path)
+    assert cfg.build.build_spatial_index is True
 
 
 def test_extraction_settings_are_typed_and_validated(tmp_path):

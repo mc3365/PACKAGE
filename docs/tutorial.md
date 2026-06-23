@@ -20,6 +20,9 @@ PACKAGE info /path/to/output/fiber_database.h5
 
 Existing extraction outputs are reused when `overwrite: false`. Each extraction writes
 `PACKAGE_manifest_<sample>.json` with input QC, tool versions, commands, and outputs.
+With `build.build_spatial_index: true`, the build also writes
+`fiber_database.index.pkl` beside the HDF5 file. Keep the sidecar with the database;
+it is used for fast coordinate queries.
 
 ## Query a region
 

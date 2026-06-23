@@ -88,7 +88,15 @@ def extract(config_path: Path, platform: str, samples: tuple[str, ...]) -> None:
     multiple=True,
     help="Sample names to build (default: all in config). Repeat flag for multiple.",
 )
-def build(config_path: Path, samples: tuple[str, ...]) -> None:
+@click.option(
+    "--build-index/--no-build-index",
+    default=None,
+    help=(
+        "Build the cached spatial index sidecar after HDF5 construction. "
+        "Defaults to build.build_spatial_index in the YAML."
+    ),
+)
+def build(config_path: Path, samples: tuple[str, ...], build_index: bool | None) -> None:
     """Build an HDF5 database from extracted intermediate files.
 
     Expects that `PACKAGE extract` (or an equivalent manual extraction) has produced
@@ -96,11 +104,17 @@ def build(config_path: Path, samples: tuple[str, ...]) -> None:
     """
     from PACKAGE.config import load_config
     from PACKAGE.db.builder import build_database
+    from PACKAGE.db.database import FiberDatabase
 
     cfg = load_config(config_path)
     sample_list = list(samples) if samples else cfg.sample_names
     click.echo(f"Building database {cfg.output_path} for samples={sample_list}")
     build_database(cfg, samples=sample_list)
+    should_build_index = cfg.build.build_spatial_index if build_index is None else build_index
+    if should_build_index:
+        click.echo(f"Building spatial index sidecar for {cfg.output_path}")
+        with FiberDatabase(cfg.output_path, build_index=True):
+            pass
     click.secho("✓ Build complete.", fg="green")
 
 

@@ -30,6 +30,9 @@ Example YAML
       methylation_threshold: 0.5
       min_msp_size: 10
 
+    build:
+      build_spatial_index: true
+
     extraction:
       threads: 16
       overwrite: false
@@ -130,6 +133,20 @@ class ExtractionConfig(BaseModel):
     samtools_executable: str = "samtools"
 
 
+class BuildConfig(BaseModel):
+    """Settings for HDF5 database construction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build_spatial_index: bool = Field(
+        default=False,
+        description=(
+            "After writing the HDF5 database, build and cache the region-query "
+            "spatial index as a sidecar .index.pkl file."
+        ),
+    )
+
+
 class Config(BaseModel):
     """Top-level PACKAGE configuration."""
 
@@ -153,6 +170,7 @@ class Config(BaseModel):
         ),
     )
     parameters: ParametersConfig = Field(default_factory=ParametersConfig)
+    build: BuildConfig = Field(default_factory=BuildConfig)
     extraction: ExtractionConfig = Field(default_factory=ExtractionConfig)
 
     @property
