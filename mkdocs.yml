@@ -25,6 +25,7 @@ nav:
   - Home: index.md
   - Installation: installation.md
   - Tutorial: tutorial.md
+  - Benchmark: benchmark.md
   - API Reference: api.md
 
 markdown_extensions:

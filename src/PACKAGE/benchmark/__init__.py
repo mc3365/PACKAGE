@@ -5,13 +5,12 @@ submodule writes its outputs (numeric tables + matplotlib figures) to a configur
 output directory so the paper figures can be regenerated end-to-end from a built
 database.
 
-Submodules:
-    query_speed     Query time vs region size (paper Fig 2a)
-    memory_profile  Memory footprint vs database size
-    build_time      Database build time profiling
-    cross_platform  ONT vs PacBio concordance metrics (paper Fig 2b)
+Implemented submodules:
+    ont          ONT storage and query benchmark command-line entry point
+    query_speed  Warm-cache query time by region size and query mode
+    storage      HDF5, intermediate-file, and record-count summaries
 
-All benchmarks take an open ``FiberDatabase`` and write outputs to ``--outdir``.
+PacBio concordance and full-build resource profiling remain later phases.
 """
 
 __all__ = []  # nothing re-exported; users import submodules directly
