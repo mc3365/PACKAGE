@@ -39,6 +39,22 @@ def test_single_molecule_heatmap_renders_layers(tiny_db_path_with_layers, tmp_pa
     plt.close(fig)
 
 
+def test_single_molecule_heatmap_track_modes(tiny_db_path_with_layers):
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        mod_fig = single_molecule_heatmap(
+            db, "chr1", 100, 900, sample="d0", tracks="modification"
+        )
+        chromatin_fig = single_molecule_heatmap(
+            db, "chr1", 100, 900, sample="d0", tracks="chromatin"
+        )
+
+    assert len(mod_fig.axes[0].patches) == 0
+    assert len(chromatin_fig.axes[0].patches) == 5
+    assert chromatin_fig.axes[0].get_title() == "d0: chr1:100-900 (chromatin)"
+    plt.close(mod_fig)
+    plt.close(chromatin_fig)
+
+
 def test_single_molecule_heatmap_handles_empty_region(tiny_db_path_with_layers):
     with FiberDatabase(tiny_db_path_with_layers) as db:
         fig = single_molecule_heatmap(db, "chr1", 3000, 4000, sample="d0")
@@ -52,6 +68,7 @@ def test_single_molecule_heatmap_handles_empty_region(tiny_db_path_with_layers):
     [
         ({"start": 10, "end": 10}, "0 <= start < end"),
         ({"start": 10, "end": 20, "layer": "bad"}, "layer must be one of"),
+        ({"start": 10, "end": 20, "tracks": "bad"}, "tracks must be one of"),
         ({"start": 10, "end": 20, "max_fibers": 0}, "at least 1"),
         ({"start": 10, "end": 20, "sample": "bad"}, "Unknown sample"),
     ],

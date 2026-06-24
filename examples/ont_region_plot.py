@@ -28,6 +28,16 @@ def main() -> None:
     parser.add_argument("--region", required=True, type=parse_region, help="chrom:start-end")
     parser.add_argument("--sample", help="sample name; defaults to the first sample")
     parser.add_argument("--layer", choices=("5mC", "5hmC", "6mA"), default="5mC")
+    parser.add_argument(
+        "--tracks",
+        choices=("full", "modification", "chromatin"),
+        default="full",
+        help=(
+            "track set to draw: full shows chromatin plus the selected modification; "
+            "modification shows only the selected modification; chromatin shows "
+            "nucleosomes and MSPs only"
+        ),
+    )
     parser.add_argument("--max-fibers", type=int, default=100)
     parser.add_argument(
         "--hide-unmodified",
@@ -48,6 +58,7 @@ def main() -> None:
             layer=args.layer,
             max_fibers=args.max_fibers,
             show_unmodified=not args.hide_unmodified,
+            tracks=args.tracks,
         )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out, dpi=200, bbox_inches="tight")

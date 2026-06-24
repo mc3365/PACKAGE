@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 _SUPPORTED_LAYERS = {"5mC", "5hmC", "6mA"}
+_SUPPORTED_TRACKS = {"full", "modification", "chromatin"}
 
 
 def single_molecule_heatmap(
@@ -16,13 +17,15 @@ def single_molecule_heatmap(
     layer: str = "5mC",
     max_fibers: int = 100,
     show_unmodified: bool = True,
+    tracks: str = "full",
     ax: Any = None,
 ) -> Any:
     """Render modification calls, nucleosomes, and MSPs for individual fibers.
 
-    Each row represents one molecule. Nucleosomes are gray blocks, MSPs are teal
-    outlines, and modification calls are vertical marks. For 5mC and 5hmC, called
-    modified bases are red and unmodified bases are light gray. 6mA calls are gold.
+    Each row represents one molecule. In ``tracks="full"`` mode, nucleosomes are
+    gray blocks, MSPs are teal outlines, and modification calls are vertical marks.
+    For 5mC and 5hmC, called modified bases are red and unmodified bases are light
+    gray. 6mA calls are gold.
     The implementation draws sparse genomic features rather than allocating a dense
     base-by-fiber matrix.
 
@@ -33,6 +36,7 @@ def single_molecule_heatmap(
         layer: Which modification to color by ('5mC', '6mA', '5hmC').
         max_fibers: Cap number of fibers shown to keep figures legible.
         show_unmodified: Show unmodified CpG calls for 5mC/5hmC layers.
+        tracks: Track set to draw: ``full``, ``modification``, or ``chromatin``.
         ax: Optional existing matplotlib axes; if None, a new figure is created.
 
     Returns:
@@ -55,6 +59,8 @@ def single_molecule_heatmap(
         raise ValueError("Region must satisfy 0 <= start < end")
     if layer not in _SUPPORTED_LAYERS:
         raise ValueError(f"layer must be one of {sorted(_SUPPORTED_LAYERS)}")
+    if tracks not in _SUPPORTED_TRACKS:
+        raise ValueError(f"tracks must be one of {sorted(_SUPPORTED_TRACKS)}")
     if max_fibers < 1:
         raise ValueError("max_fibers must be at least 1")
 
@@ -69,49 +75,54 @@ def single_molecule_heatmap(
     else:
         fig = ax.figure
 
+    show_chromatin = tracks in {"full", "chromatin"}
+    show_modification = tracks in {"full", "modification"}
     row_height = 0.62
     for row, fiber_id in enumerate(fiber_ids):
         ax.hlines(row, start, end, color="#ececec", linewidth=0.5, zorder=0)
 
-        nucleosomes = db.get_nucleosomes(fiber_id, chrom, sample=sample)
-        for feature_start, feature_end in zip(
-            nucleosomes.get("starts", []), nucleosomes.get("ends", []), strict=False
-        ):
-            left = max(int(feature_start), start)
-            right = min(int(feature_end), end)
-            if right > left:
-                ax.add_patch(
-                    Rectangle(
-                        (left, row - row_height / 2),
-                        right - left,
-                        row_height,
-                        facecolor="#55585c",
-                        edgecolor="none",
-                        alpha=0.9,
-                        zorder=1,
+        if show_chromatin:
+            nucleosomes = db.get_nucleosomes(fiber_id, chrom, sample=sample)
+            for feature_start, feature_end in zip(
+                nucleosomes.get("starts", []), nucleosomes.get("ends", []), strict=False
+            ):
+                left = max(int(feature_start), start)
+                right = min(int(feature_end), end)
+                if right > left:
+                    ax.add_patch(
+                        Rectangle(
+                            (left, row - row_height / 2),
+                            right - left,
+                            row_height,
+                            facecolor="#55585c",
+                            edgecolor="none",
+                            alpha=0.9,
+                            zorder=1,
+                        )
                     )
-                )
 
-        msps = db.get_msp(fiber_id, chrom, sample=sample)
-        for feature_start, feature_end in zip(
-            msps.get("starts", []), msps.get("ends", []), strict=False
-        ):
-            left = max(int(feature_start), start)
-            right = min(int(feature_end), end)
-            if right > left:
-                ax.add_patch(
-                    Rectangle(
-                        (left, row - row_height / 2),
-                        right - left,
-                        row_height,
-                        facecolor="none",
-                        edgecolor="#168a8a",
-                        linewidth=0.85,
-                        alpha=0.9,
-                        zorder=2,
+            msps = db.get_msp(fiber_id, chrom, sample=sample)
+            for feature_start, feature_end in zip(
+                msps.get("starts", []), msps.get("ends", []), strict=False
+            ):
+                left = max(int(feature_start), start)
+                right = min(int(feature_end), end)
+                if right > left:
+                    ax.add_patch(
+                        Rectangle(
+                            (left, row - row_height / 2),
+                            right - left,
+                            row_height,
+                            facecolor="none",
+                            edgecolor="#168a8a",
+                            linewidth=0.85,
+                            alpha=0.9,
+                            zorder=2,
+                        )
                     )
-                )
 
+        if not show_modification:
+            continue
         modifications = db.get_methylation(
             fiber_id, chrom, mod_type=layer, sample=sample
         )
@@ -168,7 +179,13 @@ def single_molecule_heatmap(
     ax.invert_yaxis()
     ax.set_xlabel(f"{chrom} position (bp)")
     ax.set_ylabel("Individual fibers")
-    ax.set_title(f"{sample}: {chrom}:{start:,}-{end:,} ({layer})")
+    if tracks == "chromatin":
+        title_label = "chromatin"
+    elif tracks == "modification":
+        title_label = f"{layer}, modification"
+    else:
+        title_label = layer
+    ax.set_title(f"{sample}: {chrom}:{start:,}-{end:,} ({title_label})")
     ax.ticklabel_format(axis="x", style="plain", useOffset=False)
     ax.set_yticks([])
     ax.spines[["top", "right", "left"]].set_visible(False)
@@ -184,24 +201,31 @@ def single_molecule_heatmap(
             color="#55585c",
         )
 
-    modification_handles = (
-        [Line2D([], [], color="#e3a018", marker="|", linestyle="None", label="6mA")]
-        if layer == "6mA"
-        else [Line2D([], [], color="#c43c39", marker="|", linestyle="None", label=layer)]
-    )
-    if layer != "6mA" and show_unmodified:
-        modification_handles.append(
-            Line2D([], [], color="#b7bdc3", marker="|", linestyle="None", label="Unmodified")
+    handles = []
+    if show_chromatin:
+        handles.extend(
+            [
+                Patch(facecolor="#55585c", label="Nucleosome"),
+                Patch(facecolor="none", edgecolor="#168a8a", label="MSP"),
+            ]
         )
-    ax.legend(
-        handles=[
-            Patch(facecolor="#55585c", label="Nucleosome"),
-            Patch(facecolor="none", edgecolor="#168a8a", label="MSP"),
-            *modification_handles,
-        ],
-        loc="upper left",
-        bbox_to_anchor=(1.005, 1.0),
-        borderaxespad=0,
-        frameon=False,
-    )
+    if show_modification:
+        modification_handles = (
+            [Line2D([], [], color="#e3a018", marker="|", linestyle="None", label="6mA")]
+            if layer == "6mA"
+            else [Line2D([], [], color="#c43c39", marker="|", linestyle="None", label=layer)]
+        )
+        if layer != "6mA" and show_unmodified:
+            modification_handles.append(
+                Line2D([], [], color="#b7bdc3", marker="|", linestyle="None", label="Unmodified")
+            )
+        handles.extend(modification_handles)
+    if handles:
+        ax.legend(
+            handles=handles,
+            loc="upper left",
+            bbox_to_anchor=(1.005, 1.0),
+            borderaxespad=0,
+            frameon=False,
+        )
     return fig

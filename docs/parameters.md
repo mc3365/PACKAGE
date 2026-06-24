@@ -181,6 +181,7 @@ python examples/ont_region_plot.py \
   --region chr1:3000000-3050000 \
   --sample d0 \
   --layer 5mC \
+  --tracks modification \
   --max-fibers 100 \
   --hide-unmodified \
   --out figures/d0_chr1_region.png
@@ -192,9 +193,13 @@ python examples/ont_region_plot.py \
 | `--region` | required | Focused interval in `chrom:start-end` form. |
 | `--sample` | first sample | Sample to plot. |
 | `--layer` | `5mC` | Modification layer: `5mC`, `5hmC`, or `6mA`. |
+| `--tracks` | `full` | Track set: `full`, `modification`, or `chromatin`. |
 | `--max-fibers` | `100` | Maximum number of fiber rows shown. |
 | `--hide-unmodified` | off | Hide unmodified 5mC/5hmC calls for a cleaner modification-focused view. |
 | `--out` | `ont_region.png` | Output figure path. |
+
+Use `--tracks modification` for 5mC/5hmC/6mA-only plots, `--tracks chromatin` for
+nucleosome/MSP-only plots, and `--tracks full` for all tracks together.
 
 ### Global ECDF Plots
 

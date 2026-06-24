@@ -264,6 +264,7 @@ python examples/ont_region_plot.py \
   --region chr1:3000000-3050000 \
   --sample d0 \
   --layer 5mC \
+  --tracks full \
   --max-fibers 100 \
   --hide-unmodified \
   --out d0_chr1_region.png
@@ -280,6 +281,7 @@ Region plot options:
 | `--region` | Focused interval in `chrom:start-end` form. |
 | `--sample` | Optional sample name. |
 | `--layer` | Modification layer: `5mC`, `5hmC`, or `6mA`. |
+| `--tracks` | `full` shows nucleosome/MSP plus the selected modification; `modification` shows only the selected modification; `chromatin` shows nucleosome/MSP only. |
 | `--max-fibers` | Maximum number of fiber rows shown. |
 | `--hide-unmodified` | Hide unmodified 5mC/5hmC calls for a cleaner modification-focused view. |
 | `--out` | Output figure path. |
