@@ -95,6 +95,7 @@ def plot_centered_annotation_heatmap(
     *,
     met_label: str = "5mC",
     title: str | None = None,
+    interpolation: str = "hanning",
 ) -> Any:
     """Plot paired center-based nucleosome and 5mC heatmaps."""
     try:
@@ -119,23 +120,39 @@ def plot_centered_annotation_heatmap(
     nuc = nuc[order]
     met = met[order]
 
+    # Match the original ComplexHeatmap color ramps closely.
     nuc_cmap = LinearSegmentedColormap.from_list(
-        "package_nuc", ["white", "lightskyblue", "navy"]
+        "package_nuc", ["white", "#63B8FF", "navy"]
     ).with_extremes(bad="#e5e5e5")
     met_cmap = LinearSegmentedColormap.from_list(
         "package_met", ["white", "lightcoral", "darkred"]
     ).with_extremes(bad="#e5e5e5")
+    fig_height = max(6.0, min(16.0, nuc.shape[0] / 100))
     fig, axes = plt.subplots(
         1,
         4,
-        figsize=(11.5, max(4.5, min(12.0, nuc.shape[0] / 80))),
+        figsize=(14.0, fig_height),
         width_ratios=[5.0, 0.8, 5.0, 0.8],
         constrained_layout=True,
     )
-    im0 = axes[0].imshow(nuc, aspect="auto", interpolation="nearest", cmap=nuc_cmap, vmin=0, vmax=1)
-    axes[1].barh(np.arange(len(nuc_mean)), nuc_mean, color="steelblue")
-    im1 = axes[2].imshow(met, aspect="auto", interpolation="nearest", cmap=met_cmap, vmin=0, vmax=1)
-    axes[3].barh(np.arange(len(met_mean)), met_mean, color="indianred")
+    im0 = axes[0].imshow(
+        nuc,
+        aspect="auto",
+        interpolation=interpolation,
+        cmap=nuc_cmap,
+        vmin=0,
+        vmax=1,
+    )
+    axes[1].barh(np.arange(len(nuc_mean)), nuc_mean, color="#4f94cd")
+    im1 = axes[2].imshow(
+        met,
+        aspect="auto",
+        interpolation=interpolation,
+        cmap=met_cmap,
+        vmin=0,
+        vmax=1,
+    )
+    axes[3].barh(np.arange(len(met_mean)), met_mean, color="#cd5555")
     for ax in axes:
         ax.invert_yaxis()
         ax.set_yticks([])
