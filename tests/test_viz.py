@@ -55,6 +55,16 @@ def test_single_molecule_heatmap_track_modes(tiny_db_path_with_layers):
     plt.close(chromatin_fig)
 
 
+def test_single_molecule_heatmap_draws_fiber_span(tiny_db_path_with_layers):
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        fig = single_molecule_heatmap(db, "chr1", 0, 3000, sample="d0")
+
+    span_segment = fig.axes[0].collections[0].get_segments()[0]
+    assert span_segment[0, 0] == 100
+    assert span_segment[1, 0] == 2100
+    plt.close(fig)
+
+
 def test_single_molecule_heatmap_handles_empty_region(tiny_db_path_with_layers):
     with FiberDatabase(tiny_db_path_with_layers) as db:
         fig = single_molecule_heatmap(db, "chr1", 3000, 4000, sample="d0")

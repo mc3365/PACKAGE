@@ -8,6 +8,27 @@ _SUPPORTED_LAYERS = {"5mC", "5hmC", "6mA"}
 _SUPPORTED_TRACKS = {"full", "modification", "chromatin"}
 
 
+def _get_fiber_span(
+    db: Any, fiber_id: str, chrom: str, sample: str
+) -> tuple[int, int] | None:
+    """Return the genomic span for one fiber, or None if metadata is unavailable."""
+    int_id = db._str_to_int(fiber_id, sample, chrom)
+    if int_id is None:
+        return None
+    meta_path = f"{sample}/{chrom}/fiber_metadata"
+    starts_path = f"{meta_path}/starts"
+    if starts_path not in db.db:
+        return None
+    ids = db.db[f"{meta_path}/fiber_int_ids"][:]
+    matches = ids == int(int_id)
+    if not matches.any():
+        return None
+    idx = int(matches.nonzero()[0][0])
+    start = int(db.db[starts_path][idx])
+    end = int(db.db[f"{meta_path}/ends"][idx])
+    return start, end
+
+
 def single_molecule_heatmap(
     db: Any,
     chrom: str,
@@ -79,7 +100,21 @@ def single_molecule_heatmap(
     show_modification = tracks in {"full", "modification"}
     row_height = 0.62
     for row, fiber_id in enumerate(fiber_ids):
-        ax.hlines(row, start, end, color="#ececec", linewidth=0.5, zorder=0)
+        fiber_span = _get_fiber_span(db, fiber_id, chrom, sample)
+        if fiber_span is None:
+            fiber_left, fiber_right = start, end
+        else:
+            fiber_left = max(fiber_span[0], start)
+            fiber_right = min(fiber_span[1], end)
+        if fiber_right > fiber_left:
+            ax.hlines(
+                row,
+                fiber_left,
+                fiber_right,
+                color="#111111",
+                linewidth=0.45,
+                zorder=0,
+            )
 
         if show_chromatin:
             nucleosomes = db.get_nucleosomes(fiber_id, chrom, sample=sample)
