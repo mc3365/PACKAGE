@@ -10,6 +10,9 @@ build while raw probabilities are retained.
 The BAM must be coordinate sorted, indexed, aligned to the configured reference, and
 contain MM/ML tags. PACKAGE checks these requirements before extraction.
 
+For all YAML fields and command-line options, see the
+[Parameter Reference](parameters.md).
+
 ## Extract and build
 
 ```bash
@@ -82,6 +85,7 @@ python examples/ont_centered_heatmap.py \
   --bed /path/to/master_annotations_v4.uniqueID.bed \
   --annotation CGI \
   --samples d0 d4 \
+  --methylation-display binned \
   --max-regions 50 \
   --outdir figures/CGI_center
 ```

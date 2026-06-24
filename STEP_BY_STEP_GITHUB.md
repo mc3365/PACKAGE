@@ -7,6 +7,9 @@ with the d0 and d4 mouse embryonic stem-cell data.
 PACKAGE currently supports ONT extraction. PacBio extraction is planned but is not
 part of this guide.
 
+For a complete list of command-line and YAML options, see
+[`docs/parameters.md`](docs/parameters.md).
+
 ## 1. Clone the repository
 
 Choose a directory where you keep code projects, then clone PACKAGE:
@@ -98,6 +101,20 @@ binarization rule. Raw probabilities are also retained in the HDF5 database.
 For a second sample, add another item under `samples` with its own BAM and output
 paths. Sample names become top-level groups in the database.
 
+Common YAML settings:
+
+| Field | Typical value | When to change it |
+| --- | --- | --- |
+| `parameters.methylation_threshold` | `0.5` | Keep this value to reproduce the validated ONT binarization. |
+| `build.build_spatial_index` | `true` | Keep enabled for fast coordinate queries. |
+| `extraction.threads` | `16` | Match available CPU cores. |
+| `extraction.overwrite` | `false` | Set to `true` only when regenerating extraction products. |
+| `extraction.validate_bam` | `true` | Keep enabled unless doing a very controlled rerun. |
+| `extraction.write_manifest` | `true` | Keep enabled for provenance and troubleshooting. |
+| `extraction.modkit_executable` | `modkit` or absolute path | Use an absolute path on HPC if tools live outside the Python environment. |
+| `extraction.ft_executable` | `ft` or absolute path | Use an absolute path on HPC if needed. |
+| `extraction.samtools_executable` | `samtools` or absolute path | Use an absolute path on HPC if needed. |
+
 ## 5. Run a small extraction test
 
 Before processing a full BAM, it is useful to test a small genomic interval. This
@@ -119,6 +136,14 @@ PACKAGE extract \
   --config configs/ont_smoke_test.yaml \
   --samples sample_test
 ```
+
+Extraction command options:
+
+| Option | Meaning |
+| --- | --- |
+| `--platform ont` | Use the ONT extractor. |
+| `--config` | YAML configuration file. |
+| `--samples` | Optional sample filter. Repeat the flag to process multiple selected samples. |
 
 Successful extraction produces:
 
@@ -171,6 +196,15 @@ Build every configured sample:
 PACKAGE build --config configs/my_ont.yaml
 ```
 
+Build command options:
+
+| Option | Meaning |
+| --- | --- |
+| `--config` | YAML file describing extracted layer paths and database output. |
+| `--samples` | Optional sample filter. Repeat to build multiple selected samples. |
+| `--build-index` | Build the spatial-index sidecar after HDF5 creation. |
+| `--no-build-index` | Skip spatial-index creation for this run. |
+
 The builder creates `output_dir/output_file`. When `build.build_spatial_index: true`
 is set in the YAML, it also creates a cached spatial-index sidecar named
 `<output>.index.pkl` for fast region queries. Keep that file beside the HDF5 database.
@@ -198,6 +232,15 @@ PACKAGE query \
   --region chr1:3000000-5000000 \
   --sample d0
 ```
+
+Query command options:
+
+| Option | Meaning |
+| --- | --- |
+| `--db` | HDF5 database path. |
+| `--region` | Region in `chrom:start-end` form. |
+| `--sample` | Optional sample filter. |
+| `--out` | Optional text file for overlapping fiber IDs. |
 
 For repeated regional analysis, create the spatial index once:
 
@@ -228,7 +271,115 @@ python examples/ont_region_plot.py \
 Use a focused interval, usually 10-50 kb, so individual molecular patterns remain
 readable. The same command accepts `5hmC` or `6mA` as the modification layer.
 
-## 10. Verify a development checkout
+Region plot options:
+
+| Option | Meaning |
+| --- | --- |
+| `--db` | HDF5 database path. |
+| `--region` | Focused interval in `chrom:start-end` form. |
+| `--sample` | Optional sample name. |
+| `--layer` | Modification layer: `5mC`, `5hmC`, or `6mA`. |
+| `--max-fibers` | Maximum number of fiber rows shown. |
+| `--out` | Output figure path. |
+
+## 10. Plot summary figures
+
+Global ECDF plots summarize per-fiber feature fractions:
+
+```bash
+python examples/ont_feature_ecdf.py \
+  --db /path/to/output/fiber_database.h5 \
+  --samples d0 d4 \
+  --outdir figures/ecdf
+```
+
+Useful options:
+
+| Option | Meaning |
+| --- | --- |
+| `--samples` | One or more samples. Omit to include all samples. |
+| `--max-fibers-per-chrom` | Optional downsampling cap for exploratory plots. |
+
+For annotation-body heatmaps and metaplots:
+
+```bash
+python examples/ont_annotation_heatmap.py \
+  --db /path/to/output/fiber_database.h5 \
+  --annotation CGI \
+  --sample d0 \
+  --max-regions 50 \
+  --min-fibers 10 \
+  --outdir figures/CGI_d0_test
+```
+
+Omit `--max-regions` for full annotation plots. Keep it for smoke tests.
+
+For fixed-window center/TSS heatmaps and metaplots:
+
+```bash
+python examples/ont_centered_heatmap.py \
+  --db /path/to/output/fiber_database.h5 \
+  --bed /path/to/master_annotations_v4.uniqueID.bed \
+  --annotation CGI \
+  --samples d0 d4 \
+  --methylation-display binned \
+  --min-fibers 10 \
+  --outdir figures/CGI_center
+```
+
+Centered plot options:
+
+| Option | Meaning |
+| --- | --- |
+| `--annotation` | Annotation class, such as `CGI`. |
+| `--samples` | One or more samples to plot together in the metaplot. |
+| `--bed` | Optional 9-column annotation BED for strand-aware TSS/gene orientation. |
+| `--max-regions` | Optional smoke-test limit. Omit for full figures. |
+| `--min-fibers` | Minimum spanning fibers required for a region. Default is `10`. |
+| `--methylation-display` | `binned` for 50 bp bins or `smoothed` for smoothed base-resolution 5mC. |
+
+For more detail on plotting outputs and defaults, see
+[`docs/parameters.md`](docs/parameters.md#plotting).
+
+## 11. Run benchmarks
+
+Use the annotation benchmark for a biologically meaningful speed test:
+
+```bash
+python -m PACKAGE.benchmark.annotation \
+  --db /path/to/output/fiber_database.h5 \
+  --sample d0 \
+  --annotation CGI \
+  --layers nucleosomes 5mC 5hmC msp \
+  --max-regions 50 \
+  --repeats 3 \
+  --warmups 1 \
+  --outdir benchmark/d0_CGI
+```
+
+Use the random-region benchmark for technical scaling across window sizes:
+
+```bash
+python -m PACKAGE.benchmark.ont \
+  --db /path/to/output/fiber_database.h5 \
+  --config configs/my_ont.yaml \
+  --sample d0 \
+  --outdir benchmark/d0 \
+  --region-sizes-kb 1 10 100 1000 \
+  --n-regions 25 \
+  --repeats 3 \
+  --query-modes spatial_index \
+  --build-index
+```
+
+For full production databases, avoid the slow array-scan baseline unless you
+specifically need it. Use `--query-modes spatial_index` for routine benchmarking.
+
+Benchmark options and outputs are described in
+[`docs/benchmark.md`](docs/benchmark.md) and
+[`docs/parameters.md`](docs/parameters.md#random-region-benchmark).
+
+## 12. Verify a development checkout
 
 Contributors should install the development dependencies and run the complete checks:
 

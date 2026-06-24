@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-    { name = "Erika Cui", email = "meiying.cui@yale.edu" },
+    { name = "Meiying Cui", email = "meiying.cui@yale.edu" },
 ]
 keywords = [
     "fiber-seq",

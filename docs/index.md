@@ -22,4 +22,5 @@ PacBio extraction is planned for a later release.
 
 - [Installation](installation.md) — getting started
 - [Tutorial](tutorial.md) — building your first database
+- [Parameter Reference](parameters.md) — command and YAML options
 - [API Reference](api.md) — module documentation

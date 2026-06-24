@@ -46,13 +46,16 @@ pip install -e ".[dev,viz]"
 
 ```bash
 # Step 1: extract modifications from BAMs
-PACKAGE extract --config configs/ont_template.yaml --platform ont
+PACKAGE extract --platform ont --config configs/my_ont.yaml --samples d0
 
-# Step 2: build the HDF5 database
-PACKAGE build --config configs/ont_template.yaml
+# Step 2: build the HDF5 database and spatial-index sidecar
+PACKAGE build --config configs/my_ont.yaml --build-index
 
-# Step 3: query
-PACKAGE query --db /path/to/output/fiber_database.h5 --region chr1:1000000-1100000
+# Step 3: query one region
+PACKAGE query \
+  --db /path/to/output/fiber_database.h5 \
+  --region chr1:1000000-1100000 \
+  --sample d0
 ```
 
 Or as a Python library:
@@ -66,8 +69,9 @@ with FiberDatabase("fiber_database.h5") as db:
     fig.savefig("ont_region.png", dpi=200)
 ```
 
-See the [step-by-step ONT workflow](STEP_BY_STEP_GITHUB.md) and
-[`examples/`](examples/) for complete usage examples.
+See the [step-by-step ONT workflow](STEP_BY_STEP_GITHUB.md),
+the [parameter reference](docs/parameters.md), and [`examples/`](examples/)
+for complete usage examples.
 
 ## Supported platforms
 
@@ -86,7 +90,7 @@ implement domain-specific analyses against the queryable data structure.
 
 If you use `PACKAGE` in published work, please cite:
 
-> Cui, E. et al. (2026). *PACKAGE: a unified framework for single-molecule integration
+> Cui, M. et al. (2026). *PACKAGE: a unified framework for single-molecule integration
 > of long-read Fiber-seq data.* [Manuscript in preparation].
 
 A `CITATION.cff` file is included for automated citation generation.
@@ -97,4 +101,4 @@ MIT. See [LICENSE](LICENSE).
 
 ## Contact
 
-Erika Cui — meiying.cui@yale.edu
+Meiying Cui — meiying.cui@yale.edu
