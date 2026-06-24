@@ -66,6 +66,13 @@ raw CSV and metadata JSON with the manuscript analysis so the panel can be regen
 The benchmark measures warm-cache regional queries; it does not claim to measure
 first-access disk latency.
 
+The random-window benchmark measures coordinate lookup only. Each point in the
+random-query scatter is one call to `FiberDatabase.get_fibers_at(chrom, start, end)`,
+which returns the fiber IDs overlapping that interval. It does not load methylation,
+nucleosome, 6mA, or MSP rows. The point color shows how many fibers were returned.
+Very high-overlap regions can be slow because returning hundreds of thousands of
+fiber IDs is itself a large output.
+
 ## Summary Figures
 
 After running the storage, random-window, and annotation benchmarks, combine the
@@ -89,7 +96,8 @@ the extracted layer files listed in the YAML; it does not include the original B
 The summary script writes:
 
 - `benchmark_storage_summary.*`: BAM/intermediate/HDF5/index size comparison;
-- `benchmark_record_counts.*`: per-sample record counts by layer;
+- `benchmark_record_counts.*`: per-sample record counts by layer. For example, a
+  5mC value of 0.5 means about 0.5 billion CpG records stored for that sample;
 - `benchmark_random_query_scatter.*`: random-window query time with returned-fiber
   counts and outliers marked;
 - `query_speed_summary_without_outliers.csv`: random-window query summary excluding
@@ -128,6 +136,14 @@ Outputs are:
 This benchmark is usually more interpretable for figures than random windows because
 it measures a real analysis pattern. The random-region benchmark remains useful for
 technical scaling across interval sizes.
+
+`--max-regions 50` processes the first 50 regions of each annotation class from the
+stored annotation table; it is a cap for reproducible smoke benchmarks, not a random
+sample. The reported row count is not the number of annotation regions. It is the
+number of `(annotation region, overlapping fiber)` rows returned after finding fibers
+that overlap those 50 regions. For each row, PACKAGE computes requested layer
+summaries such as nucleosome counts, CpG counts, percent methylated, 5hmC counts, and
+MSP counts/widths. It does not return all raw base-level arrays in this benchmark.
 
 ## Full-build resources
 

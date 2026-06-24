@@ -116,6 +116,7 @@ def plot_record_counts(summary: dict[str, Any], outdir: Path) -> None:
 
 def plot_random_query_results(results_csv: Path, outdir: Path, outlier_fibers: int) -> None:
     plt, _, _ = _require_matplotlib()
+    from matplotlib.colors import LogNorm
     import pandas as pd
 
     df = pd.read_csv(results_csv)
@@ -128,12 +129,17 @@ def plot_random_query_results(results_csv: Path, outdir: Path, outlier_fibers: i
     fig, ax = plt.subplots(figsize=(7.2, 4.8), constrained_layout=True)
     typical = df[~df["is_outlier"]]
     outliers = df[df["is_outlier"]]
+    color_norm = LogNorm(
+        vmin=max(float(df["n_fibers"].min()), 1.0),
+        vmax=max(float(df["n_fibers"].max()), 1.0),
+    )
     sc = ax.scatter(
         typical["window_kb"],
         typical["elapsed_ms"],
         c=typical["n_fibers"],
         s=45,
         cmap="viridis",
+        norm=color_norm,
         alpha=0.85,
         edgecolor="none",
         label="typical regions",
@@ -145,6 +151,7 @@ def plot_random_query_results(results_csv: Path, outdir: Path, outlier_fibers: i
             c=outliers["n_fibers"],
             s=90,
             cmap="viridis",
+            norm=color_norm,
             marker="D",
             edgecolor="#b00020",
             linewidth=1.3,
@@ -161,9 +168,19 @@ def plot_random_query_results(results_csv: Path, outdir: Path, outlier_fibers: i
 
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.set_xlabel("Query window (kb)")
+    ax.set_xlabel("Query window (kb; one point per timed window)")
     ax.set_ylabel("Elapsed time (ms)")
     ax.set_title("Random-window coordinate queries")
+    ax.text(
+        0.98,
+        0.02,
+        "Query returns overlapping fiber IDs only",
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=8,
+        color="#4b5563",
+    )
     ax.spines[["top", "right"]].set_visible(False)
     ax.legend(frameon=False, loc="upper left")
     cbar = fig.colorbar(sc, ax=ax)
@@ -202,29 +219,32 @@ def plot_annotation_benchmark(annotation_summary_csv: Path, outdir: Path) -> Non
     lower = med - q25
     upper = q75 - med
 
-    fig, ax = plt.subplots(figsize=(7.0, 4.2), constrained_layout=True)
-    bars = ax.bar(df["annotation"], med, color="#4c78a8")
+    labels = df["annotation"].str.replace("_", " ", regex=False)
+    y = range(len(df))
+    fig, ax = plt.subplots(figsize=(4.8, 3.4), constrained_layout=True)
+    bars = ax.barh(labels, med, color="#4c78a8", height=0.55)
     ax.errorbar(
-        df["annotation"],
         med,
-        yerr=[lower, upper],
+        y,
+        xerr=[lower, upper],
         fmt="none",
         color="#1f2937",
         capsize=3,
         linewidth=1.0,
     )
-    ax.set_ylabel("Median query time (s)")
-    ax.set_title("Annotation query benchmark")
+    ax.set_xlabel("Median query time (s)")
+    ax.set_title("Annotation queries")
     ax.spines[["top", "right"]].set_visible(False)
     for bar, rows in zip(bars, df["n_rows_max"], strict=False):
         ax.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height(),
-            f"{int(rows):,} rows",
-            ha="center",
-            va="bottom",
+            bar.get_width(),
+            bar.get_y() + bar.get_height() / 2,
+            f" {int(rows):,} rows",
+            ha="left",
+            va="center",
             fontsize=9,
         )
+    ax.set_xlim(0, max(med) * 1.18)
     fig.savefig(outdir / "benchmark_annotation_queries.png", dpi=220)
     fig.savefig(outdir / "benchmark_annotation_queries.pdf")
     plt.close(fig)
