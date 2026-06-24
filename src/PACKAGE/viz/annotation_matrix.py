@@ -119,8 +119,12 @@ def plot_centered_annotation_heatmap(
     nuc = nuc[order]
     met = met[order]
 
-    nuc_cmap = LinearSegmentedColormap.from_list("package_nuc", ["white", "lightskyblue", "navy"])
-    met_cmap = LinearSegmentedColormap.from_list("package_met", ["white", "lightcoral", "darkred"])
+    nuc_cmap = LinearSegmentedColormap.from_list(
+        "package_nuc", ["white", "lightskyblue", "navy"]
+    ).with_extremes(bad="#e5e5e5")
+    met_cmap = LinearSegmentedColormap.from_list(
+        "package_met", ["white", "lightcoral", "darkred"]
+    ).with_extremes(bad="#e5e5e5")
     fig, axes = plt.subplots(
         1,
         4,

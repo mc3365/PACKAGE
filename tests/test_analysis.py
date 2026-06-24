@@ -78,3 +78,11 @@ def test_smooth_methylation_preserves_short_vector_length():
 
     assert len(smoothed) == len(values)
     assert np.isnan(smoothed[np.isnan(values)]).all()
+
+
+def test_smooth_methylation_does_not_zero_pad_edges():
+    values = np.ones(500, dtype=float)
+
+    smoothed = smooth_methylation(values, sigma=50)
+
+    assert np.allclose(smoothed[[0, -1]], 1.0)

@@ -87,9 +87,17 @@ def _gaussian_kernel(sigma: float) -> np.ndarray:
 
 
 def _same_length_convolve(values: np.ndarray, kernel: np.ndarray) -> np.ndarray:
-    """Convolve while preserving the length of ``values`` even for short vectors."""
-    smoothed = np.convolve(values, kernel, mode="same")
+    """Convolve with reflected boundaries while preserving input length.
+
+    This mirrors ``scipy.ndimage.gaussian_filter1d``'s default boundary behavior more
+    closely than zero-padded convolution, avoiding artificial signal drops at the
+    edges of centered windows.
+    """
     target = len(values)
+    radius = (len(kernel) - 1) // 2
+    pad_mode = "reflect" if target > 1 else "edge"
+    padded = np.pad(values, (radius, radius), mode=pad_mode)
+    smoothed = np.convolve(padded, kernel, mode="valid")
     if len(smoothed) == target:
         return smoothed
     if len(smoothed) > target:
