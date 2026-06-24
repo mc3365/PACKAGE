@@ -66,6 +66,38 @@ raw CSV and metadata JSON with the manuscript analysis so the panel can be regen
 The benchmark measures warm-cache regional queries; it does not claim to measure
 first-access disk latency.
 
+## Summary Figures
+
+After running the storage, random-window, and annotation benchmarks, combine the
+outputs into manuscript-style summary panels:
+
+```bash
+python examples/ont_benchmark_summary.py \
+  --storage-summary benchmark/d0/storage_summary.json \
+  --query-results benchmark/d0/query_speed_results.csv \
+  --annotation-summary benchmark/annotation_d0/annotation_query_summary.csv \
+  --bam /path/to/d0.output.fiberseq.bam \
+  --bam /path/to/d4.output.fiberseq.bam \
+  --outdir figures/benchmark_summary
+```
+
+The BAM paths are optional. When supplied, the storage panel shows the aligned BAM
+footprint alongside extracted intermediates, the PACKAGE HDF5 file, and the spatial
+index. The `intermediate_size_bytes` value in `storage_summary.json` is the sum of
+the extracted layer files listed in the YAML; it does not include the original BAM.
+
+The summary script writes:
+
+- `benchmark_storage_summary.*`: BAM/intermediate/HDF5/index size comparison;
+- `benchmark_record_counts.*`: per-sample record counts by layer;
+- `benchmark_random_query_scatter.*`: random-window query time with returned-fiber
+  counts and outliers marked;
+- `query_speed_summary_without_outliers.csv`: random-window query summary excluding
+  regions with very large returned-fiber counts;
+- `benchmark_annotation_queries.*`: annotation query timing;
+- `package_ont_workflow.*`: current ONT workflow schematic; and
+- `benchmark_summary.md`: key numeric ratios.
+
 ## Annotation Query Benchmark
 
 Use the annotation benchmark for biologically meaningful workflows such as CGI,

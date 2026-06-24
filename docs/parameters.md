@@ -171,6 +171,27 @@ python -m PACKAGE.benchmark.annotation \
 This benchmark is usually easiest to interpret for method figures because it times a
 real biological query pattern.
 
+## Benchmark Summary Figures
+
+```bash
+python examples/ont_benchmark_summary.py \
+  --storage-summary benchmark/d0/storage_summary.json \
+  --query-results benchmark/d0/query_speed_results.csv \
+  --annotation-summary benchmark/annotation_d0/annotation_query_summary.csv \
+  --bam /path/to/d0.output.fiberseq.bam \
+  --bam /path/to/d4.output.fiberseq.bam \
+  --outdir figures/benchmark_summary
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--storage-summary` | required | `storage_summary.json` from `PACKAGE.benchmark.ont`. |
+| `--query-results` | none | Optional `query_speed_results.csv` for random-window scatter plots. |
+| `--annotation-summary` | none | Optional `annotation_query_summary.csv` for annotation timing bars. |
+| `--bam` | none | Optional aligned BAM path. Repeat for multiple BAMs. |
+| `--outdir` | required | Output directory for summary figures. |
+| `--outlier-fibers` | `10000` | Returned-fiber threshold used to mark random-query outliers. |
+
 ## Plotting
 
 ### Single-Molecule Region Plot
