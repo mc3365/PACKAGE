@@ -93,6 +93,7 @@ def plot_centered_annotation_heatmap(
     nuc_npz: Path,
     met_npz: Path,
     *,
+    met_label: str = "5mC",
     title: str | None = None,
 ) -> Any:
     """Plot paired center-based nucleosome and 5mC heatmaps."""
@@ -135,7 +136,8 @@ def plot_centered_annotation_heatmap(
         ax.invert_yaxis()
         ax.set_yticks([])
         ax.spines[["top", "right", "left"]].set_visible(False)
-    ticks = [0, nuc.shape[1] // 4, nuc.shape[1] // 2, 3 * nuc.shape[1] // 4, nuc.shape[1] - 1]
+    nuc_ticks = [0, nuc.shape[1] // 4, nuc.shape[1] // 2, 3 * nuc.shape[1] // 4, nuc.shape[1] - 1]
+    met_ticks = [0, met.shape[1] // 4, met.shape[1] // 2, 3 * met.shape[1] // 4, met.shape[1] - 1]
     labels = [
         f"-{extension_bp / 1000:g} kb",
         f"-{extension_bp / 2000:g} kb",
@@ -143,11 +145,12 @@ def plot_centered_annotation_heatmap(
         f"+{extension_bp / 2000:g} kb",
         f"+{extension_bp / 1000:g} kb",
     ]
-    for ax in [axes[0], axes[2]]:
-        ax.set_xticks(ticks, labels=labels)
-        ax.axvline(nuc.shape[1] / 2, color="#4d4d4d", linestyle="--", linewidth=0.7)
+    axes[0].set_xticks(nuc_ticks, labels=labels)
+    axes[2].set_xticks(met_ticks, labels=labels)
+    axes[0].axvline(nuc.shape[1] / 2, color="#4d4d4d", linestyle="--", linewidth=0.7)
+    axes[2].axvline(met.shape[1] / 2, color="#4d4d4d", linestyle="--", linewidth=0.7)
     axes[0].set_title("Nucleosome Occupancy")
-    axes[2].set_title("5mC")
+    axes[2].set_title(met_label)
     axes[1].set_title("Nuc\nMean")
     axes[3].set_title("Met\nMean")
     axes[1].set_xlim(0, 1)

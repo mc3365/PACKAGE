@@ -120,7 +120,8 @@ def test_centered_annotation_plots_render(tiny_db_path_with_layers, tmp_path):
 
     heatmap = plot_centered_annotation_heatmap(
         tmp_path / "Typical_Enhancer_d0_nuc.npz",
-        tmp_path / "Typical_Enhancer_d0_met.npz",
+        tmp_path / "Typical_Enhancer_d0_met_binned.npz",
+        met_label="5mC (50 bp bins)",
     )
     metaplot = plot_centered_metaplot(
         {"d0": tmp_path / "Typical_Enhancer_d0_metaplot.csv"},

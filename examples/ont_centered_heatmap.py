@@ -20,6 +20,12 @@ def main() -> None:
     parser.add_argument("--bed", type=Path, help="optional 9-column annotation BED for strand")
     parser.add_argument("--max-regions", type=int)
     parser.add_argument("--min-fibers", type=int, default=10)
+    parser.add_argument(
+        "--methylation-display",
+        choices=["binned", "smoothed"],
+        default="binned",
+        help="methylation matrix to show in paired heatmaps",
+    )
     args = parser.parse_args()
 
     args.outdir.mkdir(parents=True, exist_ok=True)
@@ -38,10 +44,13 @@ def main() -> None:
     metaplot_inputs: dict[str, Path] = {}
     for sample in args.samples:
         prefix = f"{args.annotation}_{sample}"
+        met_suffix = "met_binned" if args.methylation_display == "binned" else "met"
+        met_label = "5mC (50 bp bins)" if args.methylation_display == "binned" else "5mC (smoothed)"
         heatmap = plot_centered_annotation_heatmap(
             args.outdir / f"{prefix}_nuc.npz",
-            args.outdir / f"{prefix}_met.npz",
-            title=f"{args.annotation} ({sample}) centered at {center_label}",
+            args.outdir / f"{prefix}_{met_suffix}.npz",
+            met_label=met_label,
+            title=f"{args.annotation} ({sample}) centered at {center_label} [{args.methylation_display}]",
         )
         heatmap.savefig(args.outdir / f"{prefix}_center_heatmap.pdf")
         heatmap.savefig(args.outdir / f"{prefix}_center_heatmap.png", dpi=200)
