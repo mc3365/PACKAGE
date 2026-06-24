@@ -106,6 +106,100 @@ The summary script writes:
 - `package_ont_workflow.*`: current ONT workflow schematic; and
 - `benchmark_summary.md`: key numeric ratios.
 
+## How to Read the Plots
+
+The benchmark summary plots are meant to answer three different questions:
+how much data was integrated, how fast coordinate lookup is, and how fast a real
+annotation-centered biological query is.
+
+### `benchmark_storage_summary`
+
+This panel compares the data footprint of the ONT workflow. The extracted
+intermediate files are the layer files produced after running `modkit` and
+`fibertools-rs` such as raw modification TSVs, 6mA BED files, MSP BED files,
+and nucleosome CSV files. They are not the original aligned BAM files. When
+`--bam` paths are supplied to `examples/ont_benchmark_summary.py`, the BAM sizes
+are shown separately.
+
+The HDF5 bar shows the integrated PACKAGE database size, and the spatial-index
+bar shows the sidecar index used for fast coordinate lookup. A large difference
+between intermediate files and HDF5 means the package has consolidated many
+large per-layer files into a smaller queryable database.
+
+![ONT benchmark storage summary](figures/benchmark/benchmark_storage_summary.png)
+
+### `benchmark_record_counts`
+
+This panel shows how many records were stored for each sample and molecular
+layer. For example, a 5mC value near 0.5 means about 0.5 billion CpG-level
+records are stored for that sample. The stacked bars summarize database scale:
+fibers, 5mC calls, 5hmC calls, 6mA calls, MSP intervals, and nucleosome records.
+
+The 5mC and 5hmC counts can be similar because both are parsed from the same
+`modkit extract full` CpG table, while the stored probabilities and binary calls
+for each modification code are kept as separate layers.
+
+![ONT benchmark record counts](figures/benchmark/benchmark_record_counts.png)
+
+### `benchmark_random_query_scatter`
+
+This panel measures coordinate lookup speed with random genomic windows. Each
+dot is one timed call to:
+
+```python
+FiberDatabase.get_fibers_at(chrom, start, end)
+```
+
+That call returns the IDs of fibers overlapping the interval. It does not load
+the raw methylation, nucleosome, 6mA, or MSP rows. The x-axis is the query window
+size, the y-axis is elapsed time, and the color shows how many fibers were
+returned. This is useful for testing the spatial index itself.
+
+Occasional slow points usually mean the selected window overlaps an unusually
+large number of fibers. In that case the time includes returning a very large
+result, not just finding the interval. The summary CSV without outliers is useful
+for describing typical lookup speed, while the full CSV should be kept for
+transparency.
+
+![ONT random-window query benchmark](figures/benchmark/benchmark_random_query_scatter.png)
+
+### `benchmark_annotation_queries`
+
+This panel measures a more biologically realistic query. For each annotation
+class, `--max-regions 50` takes the first 50 stored regions of that class, finds
+the fibers overlapping those regions, and computes per-fiber summaries for the
+requested layers.
+
+The benchmark times:
+
+```python
+FiberDatabase.query_annotation_fast(...)
+```
+
+For each `(annotation region, overlapping fiber)` row, PACKAGE summarizes the
+requested molecular features, such as nucleosome count and spacing, CpG count
+and percent methylated, 5hmC count, and MSP count/width. This is not just a
+coordinate lookup and it does not return every raw base-level array; it measures
+the common analysis pattern: "for this annotation class, find overlapping fibers
+and summarize their molecular features."
+
+The row counts shown in the output are therefore the returned
+`(annotation region, fiber)` rows, not the number of annotation regions. For
+example, 50 promoter regions can produce more than 1,000 returned rows if many
+individual fibers overlap those promoters.
+
+![ONT annotation query benchmark](figures/benchmark/benchmark_annotation_queries.png)
+
+### `package_ont_workflow`
+
+This schematic summarizes the current ONT stage of PACKAGE: aligned fiberseq
+BAM files are processed by `modkit` and `fibertools-rs`, the extracted layers are
+packed into an indexed HDF5 database, and downstream users query or visualize
+single-molecule molecular features. PacBio is intentionally not shown as a
+validated branch yet.
+
+![PACKAGE ONT workflow](figures/benchmark/package_ont_workflow.png)
+
 ## Annotation Query Benchmark
 
 Use the annotation benchmark for biologically meaningful workflows such as CGI,
