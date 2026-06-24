@@ -184,7 +184,7 @@ def plot_centered_metaplot(
         "d0_met": "lightcoral",
         "d4_met": "darkred",
     }
-    fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(9.5, 5), constrained_layout=True)
     for sample, path in metaplot_csvs.items():
         df = pd.read_csv(path)
         x = np.linspace(-extension_bp, extension_bp, len(df), endpoint=False)
@@ -212,6 +212,12 @@ def plot_centered_metaplot(
     ax.set_ylabel("Mean signal (fraction)")
     ax.set_ylim(bottom=0)
     ax.spines[["top", "right"]].set_visible(False)
-    ax.legend(title="Sample & Signal", frameon=False, loc="best")
+    ax.legend(
+        title="Sample & Signal",
+        frameon=False,
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+        borderaxespad=0,
+    )
     ax.set_title(title or f"{annotation} center-based metaplot")
     return fig
