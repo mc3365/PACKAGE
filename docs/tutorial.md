@@ -151,19 +151,19 @@ For body-normalized annotation plots rather than fixed center/TSS windows, use
 
 ### Single-Molecule Region Plot
 
-```bash
-python examples/ont_region_plot.py \
-  --db /path/to/output/fiber_database.h5 \
-  --region chr1:3000000-3050000 \
-  --sample sample1 \
-  --layer 5mC \
-  --out ont_region.png
-```
-
 The figure shows each fiber as one row. The thin black line marks the displayed
 span of the fiber, gray blocks mark nucleosomes, teal outlines mark MSPs, and
 vertical ticks mark the selected modification layer. For 5mC and 5hmC, red ticks
 are modified calls and pale gray ticks are unmodified calls.
+
+Use track modes to make the plot less crowded:
+
+- `modification`: selected modification layer only;
+- `chromatin`: nucleosomes and MSPs only;
+- `full`: nucleosomes, MSPs, and the selected modification layer.
+
+First, a modification-only view is useful when the main question is the
+single-molecule distribution of 5mC or 5hmC along each fiber:
 
 ```bash
 python examples/ont_region_plot.py \
@@ -172,12 +172,14 @@ python examples/ont_region_plot.py \
   --sample d0 \
   --layer 5mC \
   --tracks modification \
-  --hide-unmodified \
   --max-fibers 100 \
-  --out figures/single_molecule/d0_chr1_5mC_clean.png
+  --out figures/single_molecule/d0_chr1_5mC_only_with_fiber_edges.png
 ```
 
-Use track modes to make the plot less crowded:
+![Single-molecule 5mC-only view](figures/visualization/single_molecule/d0_chr1_5mC_only_with_fiber_edges.png)
+
+A chromatin-only view is useful when nucleosome and MSP patterns become hard to
+see under base-level modification ticks:
 
 ```bash
 python examples/ont_region_plot.py \
@@ -189,15 +191,23 @@ python examples/ont_region_plot.py \
   --out figures/single_molecule/d0_chr1_chromatin_only.png
 ```
 
-Available track modes are:
+![Single-molecule chromatin-only view](figures/visualization/single_molecule/d0_chr1_chromatin_only.png)
 
-- `full`: nucleosomes, MSPs, and the selected modification layer;
-- `modification`: selected modification layer only;
-- `chromatin`: nucleosomes and MSPs only.
+A full overlay is useful for inspecting whether methylation, MSPs, and
+nucleosomes co-occur on the same individual molecules:
+
+```bash
+python examples/ont_region_plot.py \
+  --db /path/to/output/fiber_database.h5 \
+  --region chr1:3000000-3050000 \
+  --sample d0 \
+  --layer 5mC \
+  --tracks full \
+  --max-fibers 100 \
+  --out figures/single_molecule/d0_chr1_full.png
+```
+
+![Single-molecule full view](figures/visualization/single_molecule/d0_chr1_3000000_3050000_5mC_clean.png)
 
 Limit single-molecule plots to focused windows and use `--max-fibers` for
 legibility.
-
-![Single-molecule 5mC view](figures/visualization/single_molecule/d0_chr1_3000000_3050000_5mC_clean.png)
-
-![Single-molecule chromatin-only view](figures/visualization/single_molecule/d0_chr1_chromatin_only.png)
