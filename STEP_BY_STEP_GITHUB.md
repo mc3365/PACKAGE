@@ -265,6 +265,7 @@ python examples/ont_region_plot.py \
   --sample d0 \
   --layer 5mC \
   --max-fibers 100 \
+  --hide-unmodified \
   --out d0_chr1_region.png
 ```
 
@@ -280,6 +281,7 @@ Region plot options:
 | `--sample` | Optional sample name. |
 | `--layer` | Modification layer: `5mC`, `5hmC`, or `6mA`. |
 | `--max-fibers` | Maximum number of fiber rows shown. |
+| `--hide-unmodified` | Hide unmodified 5mC/5hmC calls for a cleaner modification-focused view. |
 | `--out` | Output figure path. |
 
 ## 10. Plot summary figures

@@ -182,6 +182,7 @@ python examples/ont_region_plot.py \
   --sample d0 \
   --layer 5mC \
   --max-fibers 100 \
+  --hide-unmodified \
   --out figures/d0_chr1_region.png
 ```
 
@@ -192,6 +193,7 @@ python examples/ont_region_plot.py \
 | `--sample` | first sample | Sample to plot. |
 | `--layer` | `5mC` | Modification layer: `5mC`, `5hmC`, or `6mA`. |
 | `--max-fibers` | `100` | Maximum number of fiber rows shown. |
+| `--hide-unmodified` | off | Hide unmodified 5mC/5hmC calls for a cleaner modification-focused view. |
 | `--out` | `ont_region.png` | Output figure path. |
 
 ### Global ECDF Plots

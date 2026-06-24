@@ -29,6 +29,11 @@ def main() -> None:
     parser.add_argument("--sample", help="sample name; defaults to the first sample")
     parser.add_argument("--layer", choices=("5mC", "5hmC", "6mA"), default="5mC")
     parser.add_argument("--max-fibers", type=int, default=100)
+    parser.add_argument(
+        "--hide-unmodified",
+        action="store_true",
+        help="hide unmodified 5mC/5hmC calls for a cleaner modification-focused view",
+    )
     parser.add_argument("--out", type=Path, default=Path("ont_region.png"))
     args = parser.parse_args()
 
@@ -42,6 +47,7 @@ def main() -> None:
             sample=args.sample,
             layer=args.layer,
             max_fibers=args.max_fibers,
+            show_unmodified=not args.hide_unmodified,
         )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out, dpi=200, bbox_inches="tight")
@@ -50,4 +56,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

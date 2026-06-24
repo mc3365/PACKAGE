@@ -15,6 +15,7 @@ def single_molecule_heatmap(
     sample: str | None = None,
     layer: str = "5mC",
     max_fibers: int = 100,
+    show_unmodified: bool = True,
     ax: Any = None,
 ) -> Any:
     """Render modification calls, nucleosomes, and MSPs for individual fibers.
@@ -31,6 +32,7 @@ def single_molecule_heatmap(
         sample: Sample name; if None, uses the first sample in the db.
         layer: Which modification to color by ('5mC', '6mA', '5hmC').
         max_fibers: Cap number of fibers shown to keep figures legible.
+        show_unmodified: Show unmodified CpG calls for 5mC/5hmC layers.
         ax: Optional existing matplotlib axes; if None, a new figure is created.
 
     Returns:
@@ -63,13 +65,13 @@ def single_molecule_heatmap(
     fiber_ids = sorted(db.get_fibers_at(chrom, start, end, sample=sample))[:max_fibers]
     if ax is None:
         height = max(2.5, min(12.0, 1.5 + 0.22 * max(len(fiber_ids), 1)))
-        fig, ax = plt.subplots(figsize=(11, height), constrained_layout=True)
+        fig, ax = plt.subplots(figsize=(12.5, height), constrained_layout=True)
     else:
         fig = ax.figure
 
     row_height = 0.62
     for row, fiber_id in enumerate(fiber_ids):
-        ax.hlines(row, start, end, color="#d6d6d6", linewidth=0.6, zorder=0)
+        ax.hlines(row, start, end, color="#ececec", linewidth=0.5, zorder=0)
 
         nucleosomes = db.get_nucleosomes(fiber_id, chrom, sample=sample)
         for feature_start, feature_end in zip(
@@ -85,6 +87,7 @@ def single_molecule_heatmap(
                         row_height,
                         facecolor="#55585c",
                         edgecolor="none",
+                        alpha=0.9,
                         zorder=1,
                     )
                 )
@@ -103,7 +106,8 @@ def single_molecule_heatmap(
                         row_height,
                         facecolor="none",
                         edgecolor="#168a8a",
-                        linewidth=1.0,
+                        linewidth=0.85,
+                        alpha=0.9,
                         zorder=2,
                     )
                 )
@@ -116,20 +120,48 @@ def single_molecule_heatmap(
         if not in_region:
             continue
 
+        plot_positions = [positions[i] for i in in_region]
         if layer == "6mA" or "is_methylated" not in modifications:
-            colors = ["#e3a018"] * len(in_region)
+            ax.scatter(
+                plot_positions,
+                [row] * len(in_region),
+                marker="|",
+                s=46,
+                linewidths=1.2,
+                c="#e3a018",
+                alpha=0.95,
+                zorder=3,
+            )
         else:
             calls = modifications["is_methylated"]
-            colors = ["#c43c39" if bool(calls[i]) else "#c7c9cc" for i in in_region]
-        ax.scatter(
-            [positions[i] for i in in_region],
-            [row] * len(in_region),
-            marker="|",
-            s=48,
-            linewidths=1.3,
-            c=colors,
-            zorder=3,
-        )
+            modified_positions = [
+                positions[i] for i in in_region if bool(calls[i])
+            ]
+            unmodified_positions = [
+                positions[i] for i in in_region if not bool(calls[i])
+            ]
+            if show_unmodified and unmodified_positions:
+                ax.scatter(
+                    unmodified_positions,
+                    [row] * len(unmodified_positions),
+                    marker="|",
+                    s=30,
+                    linewidths=0.8,
+                    c="#b7bdc3",
+                    alpha=0.4,
+                    zorder=3,
+                )
+            if modified_positions:
+                ax.scatter(
+                    modified_positions,
+                    [row] * len(modified_positions),
+                    marker="|",
+                    s=48,
+                    linewidths=1.2,
+                    c="#c43c39",
+                    alpha=0.95,
+                    zorder=4,
+                )
 
     ax.set_xlim(start, end)
     ax.set_ylim(-0.75, max(len(fiber_ids) - 0.25, 0.75))
@@ -155,19 +187,21 @@ def single_molecule_heatmap(
     modification_handles = (
         [Line2D([], [], color="#e3a018", marker="|", linestyle="None", label="6mA")]
         if layer == "6mA"
-        else [
-            Line2D([], [], color="#c43c39", marker="|", linestyle="None", label=layer),
-            Line2D([], [], color="#c7c9cc", marker="|", linestyle="None", label="Unmodified"),
-        ]
+        else [Line2D([], [], color="#c43c39", marker="|", linestyle="None", label=layer)]
     )
+    if layer != "6mA" and show_unmodified:
+        modification_handles.append(
+            Line2D([], [], color="#b7bdc3", marker="|", linestyle="None", label="Unmodified")
+        )
     ax.legend(
         handles=[
             Patch(facecolor="#55585c", label="Nucleosome"),
             Patch(facecolor="none", edgecolor="#168a8a", label="MSP"),
             *modification_handles,
         ],
-        loc="upper right",
+        loc="upper left",
+        bbox_to_anchor=(1.005, 1.0),
+        borderaxespad=0,
         frameon=False,
-        ncols=min(4, 2 + len(modification_handles)),
     )
     return fig
