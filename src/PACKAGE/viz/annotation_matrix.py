@@ -128,13 +128,21 @@ def plot_centered_annotation_heatmap(
         "package_met", ["white", "lightcoral", "darkred"]
     ).with_extremes(bad="#e5e5e5")
     fig_height = max(6.0, min(16.0, nuc.shape[0] / 100))
-    fig, axes = plt.subplots(
+    fig = plt.figure(figsize=(11.0, fig_height), constrained_layout=True)
+    grid = fig.add_gridspec(
         1,
-        4,
-        figsize=(14.0, fig_height),
-        width_ratios=[5.0, 0.8, 5.0, 0.8],
-        constrained_layout=True,
+        5,
+        width_ratios=[5.0, 0.55, 5.0, 0.55, 0.9],
+        wspace=0.08,
     )
+    axes = [
+        fig.add_subplot(grid[0, 0]),
+        fig.add_subplot(grid[0, 1]),
+        fig.add_subplot(grid[0, 2]),
+        fig.add_subplot(grid[0, 3]),
+    ]
+    color_axis = fig.add_subplot(grid[0, 4])
+    color_axis.axis("off")
     im0 = axes[0].imshow(
         nuc,
         aspect="auto",
@@ -154,9 +162,10 @@ def plot_centered_annotation_heatmap(
     )
     axes[3].barh(np.arange(len(met_mean)), met_mean, color="#cd5555")
     for ax in axes:
-        ax.invert_yaxis()
         ax.set_yticks([])
         ax.spines[["top", "right", "left"]].set_visible(False)
+    for ax in (axes[1], axes[3]):
+        ax.invert_yaxis()
     nuc_ticks = [0, nuc.shape[1] // 4, nuc.shape[1] // 2, 3 * nuc.shape[1] // 4, nuc.shape[1] - 1]
     met_ticks = [0, met.shape[1] // 4, met.shape[1] // 2, 3 * met.shape[1] // 4, met.shape[1] - 1]
     labels = [
@@ -176,8 +185,16 @@ def plot_centered_annotation_heatmap(
     axes[3].set_title("Met\nMean")
     axes[1].set_xlim(0, 1)
     axes[3].set_xlim(0, 1)
-    fig.colorbar(im0, ax=axes[0], label="Occupancy")
-    fig.colorbar(im1, ax=axes[2], label="5mC")
+    nuc_cax = color_axis.inset_axes([0.08, 0.52, 0.22, 0.12])
+    met_cax = color_axis.inset_axes([0.08, 0.36, 0.22, 0.12])
+    cbar0 = fig.colorbar(im0, cax=nuc_cax, ticks=[0, 0.5, 1])
+    cbar1 = fig.colorbar(im1, cax=met_cax, ticks=[0, 0.5, 1])
+    cbar0.ax.set_yticklabels(["0", "0.5", "1"])
+    cbar1.ax.set_yticklabels(["0", "0.5", "1"])
+    cbar0.ax.set_title("Nuc\nOccupancy", fontsize=8, loc="left")
+    cbar1.ax.set_title("5mC", fontsize=8, loc="left")
+    for cbar in (cbar0, cbar1):
+        cbar.ax.tick_params(labelsize=7, length=2, pad=1)
     if title:
         fig.suptitle(title)
     return fig
