@@ -161,6 +161,8 @@ def test_centered_annotation_plots_render(tiny_db_path_with_layers, tmp_path):
     assert heatmap.axes[1].yaxis_inverted()
     assert heatmap.axes[2].yaxis_inverted()
     assert heatmap.axes[3].yaxis_inverted()
+    assert heatmap.axes[1].get_ylim() == heatmap.axes[0].get_ylim()
+    assert heatmap.axes[3].get_ylim() == heatmap.axes[2].get_ylim()
     assert len(metaplot.axes) == 1
     assert metaplot.axes[0].get_legend().get_bbox_to_anchor()._bbox.x0 > 1
     plt.close(heatmap)
