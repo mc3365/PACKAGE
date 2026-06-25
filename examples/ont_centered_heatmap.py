@@ -21,6 +21,33 @@ def _count_regions(npz_path: Path) -> int:
     return int(data["matrix"].shape[0])
 
 
+def _parse_signal_colors(values: list[str] | None) -> dict[tuple[str, str], str]:
+    colors: dict[tuple[str, str], str] = {}
+    aliases = {
+        "nuc": "nuc",
+        "nucleosome": "nuc",
+        "nucleosomes": "nuc",
+        "met": "met",
+        "5mc": "met",
+        "methylation": "met",
+    }
+    for value in values or []:
+        if "=" not in value or ":" not in value.split("=", 1)[0]:
+            raise ValueError(
+                "Invalid signal color entry "
+                f"{value!r}; expected SAMPLE:SIGNAL=COLOR, for example d0:nuc=#63B8FF"
+            )
+        key, color = value.split("=", 1)
+        sample, signal = key.split(":", 1)
+        normalized_signal = aliases.get(signal.lower())
+        if normalized_signal is None:
+            raise ValueError(
+                f"Unknown signal {signal!r}; use nuc/nucleosome or met/5mC"
+            )
+        colors[(sample, normalized_signal)] = color
+    return colors
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, required=True)
@@ -30,6 +57,14 @@ def main() -> None:
     parser.add_argument("--bed", type=Path, help="optional 9-column annotation BED for strand")
     parser.add_argument("--max-regions", type=int)
     parser.add_argument("--min-fibers", type=int, default=10)
+    parser.add_argument(
+        "--signal-colors",
+        nargs="*",
+        help=(
+            "Optional metaplot colors as SAMPLE:SIGNAL=COLOR entries, e.g. "
+            "d0:nuc=#63B8FF d0:5mC=lightcoral d4:nuc=navy d4:5mC=darkred"
+        ),
+    )
     parser.add_argument(
         "--methylation-display",
         choices=["binned", "smoothed"],
@@ -79,6 +114,7 @@ def main() -> None:
         extension_bp=extension_bp,
         center_label=center_label,
         sample_counts=sample_counts,
+        signal_colors=_parse_signal_colors(args.signal_colors),
     )
     metaplot.savefig(args.outdir / f"{args.annotation}_center_metaplot.pdf")
     metaplot.savefig(args.outdir / f"{args.annotation}_center_metaplot.png", dpi=200)

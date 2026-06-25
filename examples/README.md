@@ -9,6 +9,9 @@ Runnable examples demonstrating common workflows.
 - `ont_centered_heatmap.py`: export fixed-window center/TSS matrices and save
   paired heatmap/metaplot figures
 
+ECDF plots accept `--sample-colors SAMPLE=COLOR`; centered metaplots accept
+`--signal-colors SAMPLE:SIGNAL=COLOR` for exact multi-sample figure palettes.
+
 Install visualization dependencies before running:
 
 ```bash

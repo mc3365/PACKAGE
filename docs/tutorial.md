@@ -105,6 +105,16 @@ python examples/ont_feature_ecdf.py \
   --outdir figures/ecdf_smoke
 ```
 
+For publication-style plots, provide explicit sample colors:
+
+```bash
+python examples/ont_feature_ecdf.py \
+  --db /path/to/output/fiber_database.h5 \
+  --samples WT KO \
+  --sample-colors 'WT=#3b6fb6' 'KO=#c74f46' \
+  --outdir figures/ecdf_WT_KO
+```
+
 ### Centered Heatmap and Metaplot
 
 For fixed-window center/TSS plots, use the centered workflow. Pass the matching
@@ -145,6 +155,21 @@ that span each region. The left heatmap shows nucleosome occupancy, the right
 heatmap shows 5mC, and the side bars show row means. With
 `--methylation-display binned`, 5mC is shown in 50 bp bins, which gives a smoother
 matrix for sparse CpG calls.
+
+The metaplot accepts any number of samples. By default, nucleosome lines use a
+blue series and 5mC lines use a red series in the order supplied to `--samples`.
+For exact figure colors, override individual sample/signal pairs:
+
+```bash
+python examples/ont_centered_heatmap.py \
+  --db /path/to/output/fiber_database.h5 \
+  --bed /path/to/master_annotations_v4.uniqueID.bed \
+  --annotation Promoter \
+  --samples lif_d0 lif_d4 \
+  --signal-colors 'lif_d0:nuc=#63B8FF' 'lif_d0:5mC=lightcoral' 'lif_d4:nuc=navy' 'lif_d4:5mC=darkred' \
+  --methylation-display binned \
+  --outdir figures/Promoter_center
+```
 
 ![CGI centered heatmap](figures/visualization/heatmap/CGI_d0_center_heatmap.png)
 

@@ -234,9 +234,10 @@ def plot_centered_metaplot(
     extension_bp: int,
     center_label: str = "Center",
     sample_counts: dict[str, int] | None = None,
+    signal_colors: dict[tuple[str, str], str] | None = None,
     title: str | None = None,
 ) -> Any:
-    """Plot center-based metaplot profiles with four-color d0/d4 styling."""
+    """Plot center-based metaplot profiles for one or more samples."""
     try:
         import matplotlib.pyplot as plt
     except ImportError as exc:  # pragma: no cover
@@ -244,27 +245,40 @@ def plot_centered_metaplot(
             'Metaplot figures require matplotlib. Install with `pip install ".[viz]"`.'
         ) from exc
 
-    def _sample_role(sample: str, index: int) -> str:
+    def _sample_role(sample: str) -> str | None:
         normalized = sample.lower().replace("-", "_")
         if normalized == "d0" or normalized.endswith("_d0"):
             return "d0"
         if normalized == "d4" or normalized.endswith("_d4"):
             return "d4"
-        return "d0" if index == 0 else "d4"
+        return None
 
-    colors = {
+    role_colors = {
         "d0": {"nuc": "#63B8FF", "met": "lightcoral"},
         "d4": {"nuc": "navy", "met": "darkred"},
     }
+    n_samples = max(len(metaplot_csvs), 1)
+    signal_colors = signal_colors or {}
+
+    def _default_color(sample: str, sample_index: int, signal: str) -> str:
+        role = _sample_role(sample)
+        if role in role_colors:
+            return role_colors[role][signal]
+        if n_samples == 1:
+            fraction = 0.55
+        else:
+            fraction = 0.35 + 0.55 * (sample_index / (n_samples - 1))
+        cmap_name = "Blues" if signal == "nuc" else "Reds"
+        return plt.get_cmap(cmap_name)(fraction)
+
     fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
     for sample_index, (sample, path) in enumerate(metaplot_csvs.items()):
-        sample_colors = colors[_sample_role(sample, sample_index)]
         df = pd.read_csv(path)
         x = np.linspace(-extension_bp, extension_bp, len(df), endpoint=False)
         ax.plot(
             x,
             df["nuc_mean"],
-            color=sample_colors["nuc"],
+            color=signal_colors.get((sample, "nuc"), _default_color(sample, sample_index, "nuc")),
             linewidth=1.0,
             alpha=0.8,
             label=f"{sample} Nucleosome",
@@ -272,7 +286,7 @@ def plot_centered_metaplot(
         ax.plot(
             x,
             df["met_mean"],
-            color=sample_colors["met"],
+            color=signal_colors.get((sample, "met"), _default_color(sample, sample_index, "met")),
             linewidth=1.0,
             alpha=0.8,
             label=f"{sample} 5mC",

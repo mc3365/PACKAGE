@@ -238,6 +238,7 @@ python examples/ont_feature_ecdf.py \
 | `--outdir` | required | Output directory. |
 | `--samples` | all samples | One or more samples to include. |
 | `--max-fibers-per-chrom` | all fibers | Optional downsampling cap per chromosome for faster exploratory plots. |
+| `--sample-colors` | automatic | Optional sample colors as `SAMPLE=COLOR` entries, for example `WT=#3b6fb6 KO=#c74f46`. |
 
 ### Normalized Annotation Heatmap
 
@@ -286,6 +287,7 @@ python examples/ont_centered_heatmap.py \
 | `--max-regions` | all regions | Limit regions for smoke tests. Omit for full annotation plots. |
 | `--min-fibers` | `10` | Minimum spanning fibers required for a region. |
 | `--methylation-display` | `binned` | Heatmap methylation matrix: `binned` for 50 bp bins or `smoothed` for base-resolution smoothed values. |
+| `--signal-colors` | automatic | Optional metaplot colors as `SAMPLE:SIGNAL=COLOR` entries. Signal can be `nuc`, `nucleosome`, `met`, or `5mC`, for example `WT:nuc=#63B8FF WT:5mC=lightcoral KO:nuc=navy KO:5mC=darkred`. |
 
 For CGI, the centered workflow uses a fixed +/-2.5 kb window around the annotation
 midpoint. `Promoter`, `Bivalent_Promoter`, and `PRC_Promoter` use a
@@ -293,3 +295,7 @@ strand-aware TSS center when a matching 9-column BED is provided. Gene-body
 classes use midpoint centering but still use the BED strand for minus-strand
 flipping. Without `--bed`, strand is treated as unknown, so promoter plots fall
 back to the plus/unknown TSS convention.
+
+The centered metaplot supports any number of samples. If `--signal-colors` is not
+provided, PACKAGE assigns a blue gradient to nucleosome profiles and a red
+gradient to 5mC profiles in the order supplied to `--samples`.

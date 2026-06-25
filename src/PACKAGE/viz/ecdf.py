@@ -40,6 +40,7 @@ def _plot_ecdf_set(
     title: str,
     xlabel: str,
     ncols: int,
+    sample_colors: dict[str, str] | None = None,
 ) -> Any:
     try:
         import matplotlib.pyplot as plt
@@ -49,16 +50,32 @@ def _plot_ecdf_set(
         ) from exc
 
     samples = list(dict.fromkeys(df["sample"].astype(str)))
-    colors = ["#3b6fb6", "#c74f46", "#2f8f6b", "#8d63b8", "#8a7a2f"]
+    default_colors = [
+        "#3b6fb6",
+        "#c74f46",
+        "#2f8f6b",
+        "#8d63b8",
+        "#8a7a2f",
+        "#56b4e9",
+        "#e69f00",
+        "#009e73",
+        "#cc79a7",
+        "#0072b2",
+    ]
+    sample_colors = sample_colors or {}
+    colors = {
+        sample: sample_colors.get(sample, default_colors[index % len(default_colors)])
+        for index, sample in enumerate(samples)
+    }
     nrows = (len(columns) + ncols - 1) // ncols
     fig, axes = plt.subplots(nrows, ncols, figsize=(3.4 * ncols, 3.0 * nrows), squeeze=False)
     for ax, (column, label) in zip(axes.ravel(), columns.items(), strict=False):
-        for sample, color in zip(samples, colors, strict=False):
+        for sample in samples:
             values = df.loc[df["sample"].astype(str) == sample, column].dropna().sort_values()
             if values.empty:
                 continue
             x, y = _ecdf_xy(values)
-            ax.step(x, y, where="post", color=color, linewidth=1.2, label=sample)
+            ax.step(x, y, where="post", color=colors[sample], linewidth=1.2, label=sample)
         ax.set_title(label)
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
@@ -83,7 +100,11 @@ def _plot_ecdf_set(
     return fig
 
 
-def plot_feature_ecdfs(feature_csv: Path) -> tuple[Any, Any]:
+def plot_feature_ecdfs(
+    feature_csv: Path,
+    *,
+    sample_colors: dict[str, str] | None = None,
+) -> tuple[Any, Any]:
     """Plot coverage-fraction and base-specific ECDF panels from a feature CSV."""
     df = pd.read_csv(feature_csv)
     missing = [
@@ -98,6 +119,7 @@ def plot_feature_ecdfs(feature_csv: Path) -> tuple[Any, Any]:
         title="Per-fiber feature coverage",
         xlabel="Fraction of fiber length",
         ncols=3,
+        sample_colors=sample_colors,
     )
     base_fig = _plot_ecdf_set(
         df,
@@ -105,5 +127,6 @@ def plot_feature_ecdfs(feature_csv: Path) -> tuple[Any, Any]:
         title="Per-fiber base-call fractions",
         xlabel="Fraction",
         ncols=3,
+        sample_colors=sample_colors,
     )
     return coverage_fig, base_fig
