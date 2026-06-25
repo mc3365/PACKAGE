@@ -307,6 +307,7 @@ def plot_centered_metaplot(
         title or f"{annotation} -- Center-Based Metaplot (V4)",
         fontsize=13,
         fontweight="bold",
+        pad=24,
     )
     if sample_counts:
         subtitle = ", ".join(
@@ -317,7 +318,7 @@ def plot_centered_metaplot(
         if subtitle:
             ax.text(
                 0.5,
-                1.02,
+                1.005,
                 subtitle,
                 transform=ax.transAxes,
                 ha="center",
