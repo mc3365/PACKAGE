@@ -244,20 +244,27 @@ def plot_centered_metaplot(
             'Metaplot figures require matplotlib. Install with `pip install ".[viz]"`.'
         ) from exc
 
+    def _sample_role(sample: str, index: int) -> str:
+        normalized = sample.lower().replace("-", "_")
+        if normalized == "d0" or normalized.endswith("_d0"):
+            return "d0"
+        if normalized == "d4" or normalized.endswith("_d4"):
+            return "d4"
+        return "d0" if index == 0 else "d4"
+
     colors = {
-        "d0_nuc": "#63B8FF",
-        "d4_nuc": "navy",
-        "d0_met": "lightcoral",
-        "d4_met": "darkred",
+        "d0": {"nuc": "#63B8FF", "met": "lightcoral"},
+        "d4": {"nuc": "navy", "met": "darkred"},
     }
     fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
-    for sample, path in metaplot_csvs.items():
+    for sample_index, (sample, path) in enumerate(metaplot_csvs.items()):
+        sample_colors = colors[_sample_role(sample, sample_index)]
         df = pd.read_csv(path)
         x = np.linspace(-extension_bp, extension_bp, len(df), endpoint=False)
         ax.plot(
             x,
             df["nuc_mean"],
-            color=colors.get(f"{sample}_nuc", "steelblue"),
+            color=sample_colors["nuc"],
             linewidth=1.0,
             alpha=0.8,
             label=f"{sample} Nucleosome",
@@ -265,7 +272,7 @@ def plot_centered_metaplot(
         ax.plot(
             x,
             df["met_mean"],
-            color=colors.get(f"{sample}_met", "darkred"),
+            color=sample_colors["met"],
             linewidth=1.0,
             alpha=0.8,
             label=f"{sample} 5mC",

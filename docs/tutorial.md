@@ -107,8 +107,11 @@ python examples/ont_feature_ecdf.py \
 
 ### Centered Heatmap and Metaplot
 
-For fixed-window center/TSS plots, use the centered workflow. Pass the 9-column
-annotation BED when promoter or gene-body strand orientation should be respected:
+For fixed-window center/TSS plots, use the centered workflow. Pass the matching
+9-column annotation BED when promoter or gene-body strand orientation should be
+respected. The BED should be the same annotation file used to build the database,
+because strand metadata is matched by chromosome, start, end, and unique region
+ID.
 
 ```bash
 python examples/ont_centered_heatmap.py \
@@ -131,9 +134,11 @@ This writes one heatmap per sample and one multi-sample metaplot:
 - `region_summary.csv`
 
 For CGI and other non-directional regions, the window is centered at the
-annotation midpoint. For promoter-like annotations, the window is centered at
-the strand-aware TSS when the BED contains strand information. Minus-strand
-directional regions are flipped before averaging so upstream remains on the left.
+annotation midpoint. For `Promoter`, `Bivalent_Promoter`, and `PRC_Promoter`,
+the window is centered at the strand-aware TSS when the BED contains strand
+information. Gene-body classes use a midpoint center but still use strand
+information for minus-strand flipping. Minus-strand directional regions are
+flipped before averaging so upstream remains on the left.
 
 The heatmap rows are retained annotation regions after averaging across fibers
 that span each region. The left heatmap shows nucleosome occupancy, the right

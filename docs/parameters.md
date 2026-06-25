@@ -282,11 +282,14 @@ python examples/ont_centered_heatmap.py \
 | `--outdir` | required | Output directory for centered matrices and figures. |
 | `--annotation` | required | Annotation class. |
 | `--samples` | required | One or more samples. |
-| `--bed` | none | Optional 9-column annotation BED used for strand-aware promoter/TSS orientation. |
+| `--bed` | none | Optional matching 9-column annotation BED used for strand-aware promoter/TSS orientation. Use the same annotation file used to build the database so chromosome/start/end/region ID records match. |
 | `--max-regions` | all regions | Limit regions for smoke tests. Omit for full annotation plots. |
 | `--min-fibers` | `10` | Minimum spanning fibers required for a region. |
 | `--methylation-display` | `binned` | Heatmap methylation matrix: `binned` for 50 bp bins or `smoothed` for base-resolution smoothed values. |
 
 For CGI, the centered workflow uses a fixed +/-2.5 kb window around the annotation
-midpoint. Promoter classes use a strand-aware TSS center when a 9-column BED is
-provided.
+midpoint. `Promoter`, `Bivalent_Promoter`, and `PRC_Promoter` use a
+strand-aware TSS center when a matching 9-column BED is provided. Gene-body
+classes use midpoint centering but still use the BED strand for minus-strand
+flipping. Without `--bed`, strand is treated as unknown, so promoter plots fall
+back to the plus/unknown TSS convention.
