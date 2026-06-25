@@ -32,6 +32,16 @@ integration layer.
 | **Visualization** | `PACKAGE.viz` | Per-molecule heatmap and related plots |
 | **Benchmark** | `PACKAGE.benchmark` | Reproducible scripts for performance and cross-platform figures |
 
+## Data Structure
+
+PACKAGE writes one HDF5 file containing all samples and shared annotations. Each
+sample is partitioned by chromosome, and each chromosome stores molecular features
+as parallel flat arrays. Rows are sorted by integer fiber ID, and `_indices` maps
+each fiber ID to its row range in every feature array. This keeps per-fiber lookups
+fast without repeatedly scanning whole chromosomes.
+
+![PACKAGE HDF5 data structure](docs/figures/architecture/package_hdf5_database_structure.png)
+
 ## Quick install
 
 ```bash

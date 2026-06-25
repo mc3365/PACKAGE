@@ -36,6 +36,22 @@ PACKAGE query \
   --sample sample1
 ```
 
+## How a Query Uses the Database
+
+For annotation-centered queries such as "find CGI methylation in one sample",
+PACKAGE first loads the shared annotation regions, groups them by chromosome, and
+then works chromosome by chromosome. The chromosome-level arrays are loaded once
+and reused across all regions on that chromosome.
+
+Within a chromosome, PACKAGE finds overlapping fibers from the fiber metadata
+arrays, then uses `_indices` to jump directly to each fiber's row range in the
+requested feature arrays. For example, the 5mC slice index maps a fiber integer
+ID to the start and end rows for that fiber's CpG calls. PACKAGE slices only that
+range and masks it to the query interval, then returns per-fiber summaries such
+as CpG count and percent methylated.
+
+![PACKAGE CGI methylation query walkthrough](figures/architecture/package_query_walkthrough_cgi_methylation.png)
+
 ## Visualization Examples
 
 Install the optional plotting dependencies before running these examples:
