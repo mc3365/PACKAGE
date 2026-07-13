@@ -127,12 +127,16 @@ def _parse_block_bed_record(
     if columns[5] not in {"+", "-", "."}:
         raise ValueError(f"Invalid strand at {source}:{line_number}: {columns[5]!r}")
 
-    candidates: list[tuple[int | None, int, int]] = []
     if len(columns) >= 12:
-        candidates.append((9, 10, 11))  # BED12: blockCount, blockSizes, blockStarts
-    if len(columns) >= 11:
-        candidates.append((None, 9, 10))  # BED9+2: itemRgb, blockSizes, blockStarts
-    candidates.append((None, 8, 9))  # BED8+2: blockSizes, blockStarts
+        # BED12: blockCount, blockSizes, blockStarts.
+        candidates: list[tuple[int | None, int, int]] = [(9, 10, 11)]
+    elif len(columns) == 11:
+        # BED9+2: itemRgb, blockSizes, blockStarts.
+        candidates = [(None, 9, 10)]
+    else:
+        # BED8+2: blockSizes, blockStarts.  Do not use this as a fallback for
+        # longer malformed rows because an RGB field can look like a block list.
+        candidates = [(None, 8, 9)]
 
     errors: list[str] = []
     for count_idx, sizes_idx, starts_idx in candidates:
