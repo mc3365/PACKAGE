@@ -253,6 +253,38 @@ def _all_list(value: str) -> list[str]:
     return [x for x in value.rstrip(",").split(",") if x != ""]
 
 
+def _missing_token(value: str) -> bool:
+    return value in {"", ".", "NA", "NaN", "nan"}
+
+
+def _optional_int(value: str, *, field_name: str, source: Path, line_number: int) -> int | None:
+    if _missing_token(value):
+        return None
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid integer in {field_name} at {source}:{line_number}: {value!r}"
+        ) from exc
+
+
+def _optional_float(
+    value: str,
+    *,
+    field_name: str,
+    source: Path,
+    line_number: int,
+) -> float | None:
+    if _missing_token(value):
+        return None
+    try:
+        return float(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid number in {field_name} at {source}:{line_number}: {value!r}"
+        ) from exc
+
+
 def inspect_pacbio_all(
     all_tsv: Path,
     *,
@@ -306,15 +338,30 @@ def inspect_pacbio_all(
                     f"{len(ref_5mc)} ref_5mC != {len(qual_5mc)} 5mC_qual"
                 )
             for pos, qual in zip(ref_5mc, qual_5mc, strict=True):
-                pos_i = int(pos)
-                qual_i = int(qual)
+                total_5mc += 1
+                pos_i = _optional_int(
+                    pos,
+                    field_name="ref_5mC",
+                    source=all_tsv,
+                    line_number=line_number,
+                )
+                if pos_i is None or pos_i < 0:
+                    continue
+                qual_i = _optional_int(
+                    qual,
+                    field_name="5mC_qual",
+                    source=all_tsv,
+                    line_number=line_number,
+                )
+                if qual_i is None:
+                    raise ValueError(
+                        f"Missing 5mC_qual for mapped ref_5mC at {all_tsv}:{line_number}"
+                    )
                 if not 0 <= qual_i <= 255:
                     raise ValueError(
                         f"5mC_qual out of ML-byte range at {all_tsv}:{line_number}: {qual_i}"
                     )
-                total_5mc += 1
-                if pos_i >= 0:
-                    mapped_5mc += 1
+                mapped_5mc += 1
 
             if {"ref_m6a", "m6a_qual"} <= set(index):
                 ref_m6a = _all_list(cols[index["ref_m6a"]])
@@ -325,7 +372,30 @@ def inspect_pacbio_all(
                         f"{len(ref_m6a)} ref_m6a != {len(qual_m6a)} m6a_qual"
                     )
                 total_m6a += len(ref_m6a)
-                mapped_m6a += sum(1 for pos in ref_m6a if int(pos) >= 0)
+                for pos, qual in zip(ref_m6a, qual_m6a, strict=True):
+                    pos_i = _optional_int(
+                        pos,
+                        field_name="ref_m6a",
+                        source=all_tsv,
+                        line_number=line_number,
+                    )
+                    if pos_i is None or pos_i < 0:
+                        continue
+                    qual_i = _optional_int(
+                        qual,
+                        field_name="m6a_qual",
+                        source=all_tsv,
+                        line_number=line_number,
+                    )
+                    if qual_i is None:
+                        raise ValueError(
+                            f"Missing m6a_qual for mapped ref_m6a at {all_tsv}:{line_number}"
+                        )
+                    if not 0 <= qual_i <= 255:
+                        raise ValueError(
+                            f"m6a_qual out of ML-byte range at {all_tsv}:{line_number}: {qual_i}"
+                        )
+                    mapped_m6a += 1
 
             if has_fire:
                 starts = _all_list(cols[index["ref_msp_starts"]])
@@ -337,7 +407,15 @@ def inspect_pacbio_all(
                         f"{len(starts)} starts, {len(lengths)} lengths, {len(fire)} fire scores"
                     )
                 fire_entries += len(fire)
-                positive_fire_entries += sum(1 for value in fire if float(value) > 0)
+                for value in fire:
+                    score = _optional_float(
+                        value,
+                        field_name="fire",
+                        source=all_tsv,
+                        line_number=line_number,
+                    )
+                    if score is not None and score > 0:
+                        positive_fire_entries += 1
 
             if records >= max_records:
                 break
@@ -396,7 +474,7 @@ def convert_pacbio_all_5mc_to_modkit(
                 "mod_code",
             ]
         )
-        for line in source:
+        for line_number, line in enumerate(source, start=2):
             if not line.strip():
                 continue
             cols = line.rstrip("\n").split("\t")
@@ -412,11 +490,30 @@ def convert_pacbio_all_5mc_to_modkit(
                     f"{len(ref_positions)} positions != {len(qualities)} qualities"
                 )
             for ref_pos, qual in zip(ref_positions, qualities, strict=True):
-                pos = int(ref_pos)
-                if pos < 0:
+                pos = _optional_int(
+                    ref_pos,
+                    field_name="ref_5mC",
+                    source=all_tsv,
+                    line_number=line_number,
+                )
+                if pos is None or pos < 0:
                     skipped_unmapped += 1
                     continue
-                probability = int(qual) / 255.0
+                qual_i = _optional_int(
+                    qual,
+                    field_name="5mC_qual",
+                    source=all_tsv,
+                    line_number=line_number,
+                )
+                if qual_i is None:
+                    raise ValueError(
+                        f"Missing 5mC_qual for mapped ref_5mC at {all_tsv}:{line_number}"
+                    )
+                if not 0 <= qual_i <= 255:
+                    raise ValueError(
+                        f"5mC_qual out of ML-byte range while converting {all_tsv}: {qual_i}"
+                    )
+                probability = qual_i / 255.0
                 writer.writerow(
                     [
                         fiber,

@@ -62,6 +62,24 @@ def test_convert_pacbio_all_5mc_to_modkit_compatible_tsv(tmp_path: Path):
     assert rows[-1][12] == f"{64 / 255:.6f}"
 
 
+def test_pacbio_all_missing_dot_positions_are_skipped(tmp_path: Path):
+    all_path = tmp_path / "pacbio_all_dot.tsv"
+    out_path = tmp_path / "pacbio_5mc_modkit.tsv"
+    all_path.write_text(
+        _PACBIO_ALL
+        + "chr2\t1000\t1200\tfiber_c\t3\t+\t0\tUNK\trg1\t200\t0\t1\t0\t1\t0\t0\t1\t"
+        + ".\t.\t.\t.\t.\t.\t.\t.\t.\t.\t.\t.\t42\t.\t.\n"
+    )
+
+    summary = inspect_pacbio_all(all_path)
+    converted = convert_pacbio_all_5mc_to_modkit(all_path, out_path)
+
+    assert summary["total_5mC_calls_checked"] == 5
+    assert summary["mapped_5mC_calls_checked"] == 3
+    assert converted["converted_5mC_rows"] == 3
+    assert converted["skipped_unmapped_5mC_rows"] == 2
+
+
 def test_normalize_fibertools_block_bed_accepts_bed12(tmp_path: Path):
     raw = tmp_path / "msp.raw.bed"
     out = tmp_path / "msp.bed"
