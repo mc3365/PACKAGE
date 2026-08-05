@@ -242,7 +242,7 @@ with FiberDatabase(db) as fdb:
         "CGI",
         sample="pacbio_test",
         max_regions=50,
-        layers=["nucleosomes", "5mC", "6mA", "msp"],
+        feature_types=["nucleosomes", "5mC", "6mA", "msp"],
     )
     print(result.shape)
     print(result.head())
