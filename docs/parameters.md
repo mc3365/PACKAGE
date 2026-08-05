@@ -1,28 +1,30 @@
 # Parameter Reference
 
-This page lists the user-facing parameters for the ONT workflow. It is organized by
-workflow stage: extraction, HDF5 build, query, benchmark, and plotting.
+This page lists user-facing parameters for ONT and PacBio Phase 1 workflows. It is
+organized by workflow stage: extraction, HDF5 build, query, benchmark, and plotting.
 
-PACKAGE currently validates the ONT workflow. PacBio extraction is planned for a
-future release.
+ONT is validated end to end. PacBio Phase 1 normalizes fibertools outputs into the
+same HDF5 schema for nucleosomes, 5mC, 6mA, and MSPs. PacBio 5hmC and FIRE
+score/co-accessibility HDF5 layers are not yet built.
 
 ## YAML Configuration
 
-Start from `configs/ont_template.yaml` and replace every `/path/to` value.
+Start from `configs/ont_template.yaml` or `configs/pacbio_template.yaml` and replace
+every `/path/to` value.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `output_dir` | yes | Directory where the HDF5 database is written. |
 | `output_file` | yes | HDF5 filename created by `PACKAGE build`. |
-| `reference` | yes for extraction | Reference FASTA used by `modkit extract full --reference`. It should match the BAM genome assembly. |
+| `reference` | yes for extraction | Reference FASTA used by ONT `modkit extract full --reference`. It should match the BAM genome assembly. |
 | `samples[].name` | yes | Short sample name. This becomes the top-level sample name in the HDF5 database. |
-| `samples[].bam` | yes for extraction | Coordinate-sorted, indexed, aligned BAM with MM/ML modification tags. |
+| `samples[].bam` | yes for extraction | Coordinate-sorted, indexed, aligned BAM. ONT BAMs must have MM/ML modification tags; PacBio BAMs should be fibertools-compatible Fiber-seq or FIRE BAMs. |
 | `samples[].layers.nucleosomes` | yes for build | Flattened nucleosome CSV produced by `PACKAGE extract`. |
-| `samples[].layers.5mC` | optional | Modkit `extract full` TSV or TSV.GZ. Usually the same file as `5hmC`. |
-| `samples[].layers.5hmC` | optional | Modkit `extract full` TSV or TSV.GZ. Usually the same file as `5mC`. |
-| `samples[].layers.6mA` | optional | Fibertools `ft extract --m6a` BED output. |
-| `samples[].layers.msp` | optional | Fibertools `ft extract --msp` BED output. |
-| `annotations` | optional | Named BED4 annotation files loaded into the HDF5 database. |
+| `samples[].layers.5mC` | optional | ONT: modkit `extract full` TSV or TSV.GZ, usually the same file as `5hmC`. PacBio: PACKAGE-normalized modkit-like TSV/TSV.GZ created from `ft extract --all`. |
+| `samples[].layers.5hmC` | optional | ONT only: modkit `extract full` TSV or TSV.GZ. Usually the same file as `5mC`. |
+| `samples[].layers.6mA` | optional | Fibertools `ft extract --m6a` BED output. PacBio extraction normalizes this to builder-compatible BED12. |
+| `samples[].layers.msp` | optional | Fibertools `ft extract --msp` BED output. PacBio extraction normalizes this to builder-compatible BED12. |
+| `annotations` | optional | Named BED annotation files loaded into the HDF5 database during build. Rebuild the database to add annotations if they were omitted. |
 | `parameters.methylation_threshold` | yes | Probability cutoff used to create binary 5mC/5hmC calls during HDF5 build. The validated ONT value is `0.5`. Raw probabilities are also retained. |
 | `parameters.min_msp_size` | yes | Minimum MSP interval size kept during HDF5 build. |
 | `build.build_spatial_index` | recommended | Whether `PACKAGE build` should also create `<database>.index.pkl` for fast coordinate queries. |
@@ -31,7 +33,7 @@ Start from `configs/ont_template.yaml` and replace every `/path/to` value.
 
 | Field | Default in template | Meaning |
 | --- | --- | --- |
-| `extraction.threads` | `16` | Threads passed to `modkit`. |
+| `extraction.threads` | `16` | Threads used by platform extraction tools when supported. |
 | `extraction.overwrite` | `false` | When `false`, existing extraction outputs are reused. Set `true` to regenerate them. |
 | `extraction.keep_nucleosome_bed` | `true` | Keep the intermediate fibertools BED12 nucleosome file beside the flattened CSV. |
 | `extraction.validate_bam` | `true` | Check BAM readability, index, and sampled MM/ML tags before extraction. |
@@ -40,8 +42,8 @@ Start from `configs/ont_template.yaml` and replace every `/path/to` value.
 | `extraction.ft_executable` | `ft` | Executable name or absolute path for fibertools-rs. |
 | `extraction.samtools_executable` | `samtools` | Executable name or absolute path for samtools. |
 
-Use absolute executable paths on HPC systems when the Python environment and ONT
-tool environment are different.
+Use absolute executable paths on HPC systems when the Python environment and
+long-read tool environment are different.
 
 ## Extraction
 
@@ -54,11 +56,13 @@ PACKAGE extract \
 
 | Option | Required | Meaning |
 | --- | --- | --- |
-| `--platform ont` | yes | Selects the ONT extractor. `pacbio` is reserved for future support. |
+| `--platform ont/pacbio` | yes | Selects the platform-specific extractor. |
 | `--config` | yes | YAML configuration file. |
 | `--samples` | no | Sample name to extract. Repeat the flag for multiple samples. If omitted, all samples in the YAML are processed. |
 
 Outputs per sample:
+
+ONT outputs:
 
 - `<sample>_raw_mods.tsv.gz`: modkit table containing 5mC and 5hmC rows.
 - `<sample>_6ma.bed`: fibertools 6mA intervals.
@@ -66,6 +70,15 @@ Outputs per sample:
 - `<sample>_nuc_features.bed12`: raw fibertools nucleosome BED12 when kept.
 - `<sample>_nuc_features.csv`: flattened nucleosome table used by the builder.
 - `PACKAGE_manifest_<sample>.json`: extraction QC and provenance when enabled.
+
+PacBio outputs:
+
+- `<sample>_5mc_for_PACKAGE.tsv.gz`: modkit-like 5mC TSV created from `ft extract --all`.
+- `<sample>_6ma_for_PACKAGE.bed`: normalized BED12 6mA file.
+- `<sample>_msp_for_PACKAGE.bed`: normalized BED12 MSP file.
+- `<sample>_nuc_features.csv`: flattened nucleosome table used by the builder.
+- raw sidecar files such as `<sample>.fibertools_all.tsv.gz` and `<sample>.raw.bed` may be kept for inspection.
+- `PACKAGE_manifest_<sample>.json`: extraction QC, conversion QC, and provenance when enabled.
 
 ## Build
 
@@ -86,6 +99,10 @@ PACKAGE build \
 The build writes `output_dir/output_file`. If spatial indexing is enabled, it also
 writes `<output_file>.index.pkl` beside the HDF5 file. Keep the sidecar with the HDF5
 database for fast region queries.
+
+Annotations and molecular layers are written during the build. PACKAGE does not yet
+provide a command to append annotations or FIRE/co-accessibility layers to an existing
+HDF5 file in place; rebuild from the same intermediate files when adding those inputs.
 
 ## Info And Region Query
 

@@ -4,13 +4,15 @@ Architecture
 ============
 
 Platform-specific extraction is isolated in ``ont.py`` and ``pacbio.py``. ONT is the
-validated implementation; PacBio is currently a placeholder for a future release.
+validated end-to-end implementation. PacBio Phase 1 normalizes fibertools outputs
+into the same builder inputs used by the HDF5 schema.
 
 Each platform module orchestrates established tools:
 
 - **ONT** (``ont.py``): modkit extract (5mC/5hmC) + fibertools-rs ft extract (m6A, MSP,
   nucleosomes)
-- **PacBio** (``pacbio.py``): placeholder only; not implemented in this release
+- **PacBio** (``pacbio.py``): fibertools-rs ``ft extract`` normalization for
+  5mC, 6mA, MSP, and nucleosomes
 
 Shared helpers live in:
 

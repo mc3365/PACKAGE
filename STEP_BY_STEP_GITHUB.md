@@ -4,8 +4,8 @@ This guide starts with an aligned Oxford Nanopore BAM and ends with a queryable
 PACKAGE database and a single-molecule regional plot. It follows the workflow tested
 with the d0 and d4 mouse embryonic stem-cell data.
 
-PACKAGE currently supports ONT extraction. PacBio extraction is planned but is not
-part of this guide.
+This guide focuses on the ONT workflow. PacBio Phase 1 support is documented in
+[`docs/tutorial.md`](docs/tutorial.md) and [`configs/pacbio_template.yaml`](configs/pacbio_template.yaml).
 
 For a complete list of command-line and YAML options, see
 [`docs/parameters.md`](docs/parameters.md).

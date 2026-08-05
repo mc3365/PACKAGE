@@ -1,0 +1,45 @@
+# Portable PacBio template. Replace every /path/to value before running.
+#
+# PacBio Phase 1 currently supports:
+#   nucleosomes, 5mC, 6mA, and MSP
+#
+# The extractor normalizes fibertools outputs before HDF5 build:
+#   - ft extract --all -> modkit-like 5mC TSV
+#   - ft extract --m6a -> normalized BED12 6mA
+#   - ft extract --msp -> normalized BED12 MSP
+#   - ft extract --nuc -> flattened nucleosome CSV
+#
+# PacBio 5hmC and FIRE/co-accessibility HDF5 layers are not currently built.
+output_dir: /path/to/output
+output_file: pacbio_fiber_database.h5
+reference: /path/to/reference/genome.fa
+
+samples:
+  - name: pacbio_sample1
+    bam: /path/to/pacbio_sample1.fire.bam
+    layers:
+      nucleosomes: /path/to/output/pacbio_sample1_nuc_features.csv
+      "5mC": /path/to/output/pacbio_sample1_5mc_for_PACKAGE.tsv.gz
+      "6mA": /path/to/output/pacbio_sample1_6ma_for_PACKAGE.bed
+      msp: /path/to/output/pacbio_sample1_msp_for_PACKAGE.bed
+
+# Optional. Add the same master annotation BED used for ONT if you want
+# query_annotation_fast() and centered annotation plots.
+annotations:
+  master: /path/to/master_annotations_basic.uniqueID.bed
+
+parameters:
+  methylation_threshold: 0.5
+  min_msp_size: 10
+
+build:
+  build_spatial_index: true
+
+extraction:
+  threads: 16
+  overwrite: false
+  keep_nucleosome_bed: true
+  validate_bam: true
+  write_manifest: true
+  ft_executable: ft
+  samtools_executable: samtools

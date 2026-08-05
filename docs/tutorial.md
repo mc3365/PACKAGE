@@ -1,6 +1,11 @@
-# ONT Tutorial
+# Tutorial
 
-## Prepare the configuration
+PACKAGE uses the same HDF5 schema for ONT and PacBio after platform-specific
+extraction outputs have been converted into common intermediate files.
+
+## ONT Workflow
+
+### Prepare the configuration
 
 Copy `configs/ont_template.yaml`, replace every `/path/to` value, and keep the 5mC
 and 5hmC layer paths identical. The shared modkit table contains both call types.
@@ -13,7 +18,7 @@ contain MM/ML tags. PACKAGE checks these requirements before extraction.
 For all YAML fields and command-line options, see the
 [Parameter Reference](parameters.md).
 
-## Extract and build
+### Extract and build
 
 ```bash
 PACKAGE extract --platform ont --config configs/my_ont.yaml
@@ -27,7 +32,7 @@ With `build.build_spatial_index: true`, the build also writes
 `fiber_database.index.pkl` beside the HDF5 file. Keep the sidecar with the database;
 it is used for fast coordinate queries.
 
-## Query a region
+### Query a region
 
 ```bash
 PACKAGE query \
@@ -35,6 +40,227 @@ PACKAGE query \
   --region chr1:3000000-5000000 \
   --sample sample1
 ```
+
+## PacBio Phase 1 Workflow
+
+PacBio support currently covers the shared Phase 1 layers:
+
+- nucleosomes;
+- 5mC;
+- 6mA;
+- MSPs.
+
+PacBio 5hmC is not produced by this pathway. FIRE/co-accessibility scores are
+validated from `ft extract --all` when present, but they are not yet stored as a
+dedicated HDF5 layer.
+
+### Prepare raw fibertools outputs
+
+If starting from a PacBio Fiber-seq or FIRE BAM, run fibertools extraction. A
+typical command is:
+
+```bash
+ft extract \
+  --nuc pacbio_nuc.bed.gz \
+  --msp pacbio_msp.bed.gz \
+  --m6a pacbio_6ma.bed.gz \
+  --cpg pacbio_5mc.bed.gz \
+  --all pacbio_all.tsv.gz \
+  --simplify \
+  yaleFiberAug19_2025.fire.bam
+```
+
+`pacbio_5mc.bed.gz` is useful for inspection, but PACKAGE uses
+`pacbio_all.tsv.gz` for the packaged 5mC layer because that table contains named
+`ref_5mC` and `5mC_qual` fields. The PacBio normalizer skips missing reference
+positions such as `-1` and `.`.
+
+### Normalize PacBio outputs for PACKAGE build
+
+The normalization step is file-format normalization, not biological signal
+normalization. It checks the raw fibertools files and writes the same
+intermediate formats used by the HDF5 builder:
+
+| Raw PacBio file | Builder-ready file |
+| --- | --- |
+| `pacbio_all.tsv.gz` | modkit-like 5mC TSV/TSV.GZ |
+| `pacbio_6ma.bed.gz` | BED12-style 6mA |
+| `pacbio_msp.bed.gz` | BED12-style MSP |
+| `pacbio_nuc.bed.gz` | flattened nucleosome CSV |
+
+For an already extracted test directory:
+
+```bash
+PACBIO_DIR=/path/to/pacbio_mm
+OUT=$PACBIO_DIR/package_test
+mkdir -p "$OUT"
+
+python - <<PY
+from pathlib import Path
+from PACKAGE.extract.pacbio import (
+    inspect_pacbio_all,
+    convert_pacbio_all_5mc_to_modkit,
+    normalize_fibertools_block_bed,
+)
+from PACKAGE.extract.ont import flatten_nucleosome_bed12
+
+pacbio = Path("$PACBIO_DIR")
+out = Path("$OUT")
+
+print(inspect_pacbio_all(pacbio / "pacbio_all.tsv.gz"))
+
+print(convert_pacbio_all_5mc_to_modkit(
+    pacbio / "pacbio_all.tsv.gz",
+    out / "pacbio_5mc_for_PACKAGE.tsv.gz",
+))
+
+print(normalize_fibertools_block_bed(
+    pacbio / "pacbio_6ma.bed.gz",
+    out / "pacbio_6ma_for_PACKAGE.bed",
+    expected="single_base",
+))
+
+print(normalize_fibertools_block_bed(
+    pacbio / "pacbio_msp.bed.gz",
+    out / "pacbio_msp_for_PACKAGE.bed",
+    expected="interval",
+))
+
+normalize_fibertools_block_bed(
+    pacbio / "pacbio_nuc.bed.gz",
+    out / "pacbio_nuc_for_PACKAGE.bed",
+    expected="interval",
+)
+n = flatten_nucleosome_bed12(
+    out / "pacbio_nuc_for_PACKAGE.bed",
+    out / "pacbio_nuc_features.csv",
+)
+print({"nucleosome_rows": n})
+PY
+```
+
+Check the normalized BED files before building:
+
+```bash
+python - <<'PY'
+for p in [
+    "pacbio_msp_for_PACKAGE.bed",
+    "pacbio_6ma_for_PACKAGE.bed",
+    "pacbio_nuc_for_PACKAGE.bed",
+]:
+    print("\nChecking", p)
+    with open(p) as f:
+        for i, line in zip(range(1, 1001), f):
+            c = line.rstrip("\n").split("\t")
+            assert len(c) == 12, (p, i, len(c))
+            block_count = int(c[9])
+            sizes = [x for x in c[10].rstrip(",").split(",") if x]
+            starts = [x for x in c[11].rstrip(",").split(",") if x]
+            assert block_count == len(sizes) == len(starts), (
+                p, i, block_count, len(sizes), len(starts)
+            )
+    print("PASS")
+PY
+```
+
+### Build and query a PacBio HDF5
+
+Start from `configs/pacbio_template.yaml`, then point the layer paths to the
+normalized files:
+
+```yaml
+samples:
+  - name: pacbio_test
+    layers:
+      nucleosomes: /path/to/package_test/pacbio_nuc_features.csv
+      5mC: /path/to/package_test/pacbio_5mc_for_PACKAGE.tsv.gz
+      6mA: /path/to/package_test/pacbio_6ma_for_PACKAGE.bed
+      msp: /path/to/package_test/pacbio_msp_for_PACKAGE.bed
+
+annotations:
+  master: /path/to/master_annotations_basic.uniqueID.bed
+```
+
+Build and inspect:
+
+```bash
+PACKAGE build --config configs/my_pacbio.yaml
+PACKAGE info /path/to/output/pacbio_fiber_database.h5
+```
+
+Then query a coordinate window:
+
+```bash
+PACKAGE query \
+  --db /path/to/output/pacbio_fiber_database.h5 \
+  --sample pacbio_test \
+  --region chr1:3000000-3050000
+```
+
+And test per-fiber accessors:
+
+```bash
+python - <<'PY'
+from PACKAGE import FiberDatabase
+
+db = "/path/to/output/pacbio_fiber_database.h5"
+sample = "pacbio_test"
+chrom = "chr1"
+
+with FiberDatabase(db) as fdb:
+    fibers = fdb.get_fibers_at(chrom, 3000000, 3050000, sample=sample)
+    print("n fibers:", len(fibers))
+    first = fibers[0] if fibers else None
+    print("first fiber:", first)
+
+    if first:
+        print("nucleosomes:", fdb.get_nucleosomes(first, chrom, sample=sample))
+        print("5mC:", fdb.get_methylation(first, chrom, mod_type="5mC", sample=sample))
+        print("6mA:", fdb.get_methylation(first, chrom, mod_type="6mA", sample=sample))
+        print("MSP:", fdb.get_msp(first, chrom, sample=sample))
+PY
+```
+
+### Annotation queries
+
+Annotation BED files are written during `PACKAGE build`. If the HDF5 was built
+without annotations, rebuild with the `annotations.master` path added to the YAML.
+The package does not yet expose a safe command for adding annotations to an
+existing HDF5 file in place.
+
+After rebuilding with annotations:
+
+```bash
+python - <<'PY'
+from PACKAGE import FiberDatabase
+
+db = "/path/to/output/pacbio_fiber_database.h5"
+
+with FiberDatabase(db) as fdb:
+    print(fdb.list_annotations())
+    result = fdb.query_annotation_fast(
+        "CGI",
+        sample="pacbio_test",
+        max_regions=50,
+        layers=["nucleosomes", "5mC", "6mA", "msp"],
+    )
+    print(result.shape)
+    print(result.head())
+PY
+```
+
+### Current update behavior
+
+HDF5 technically supports append-mode updates, but PACKAGE currently treats a
+database build as a reproducible artifact: annotations and molecular layers are
+written during `PACKAGE build`. To add annotations, rebuild from the same
+intermediate files with `annotations.master` included.
+
+The same applies to future FIRE/co-accessibility storage. If a new FIRE layer is
+added to the schema, existing HDF5 files will need either a rebuild or a dedicated
+migration/append command. That append command is not implemented yet because it
+needs careful validation to avoid silently mixing layers from different extraction
+runs.
 
 ## How a Query Uses the Database
 

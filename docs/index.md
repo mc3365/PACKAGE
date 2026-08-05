@@ -1,6 +1,6 @@
 # PACKAGE
 
-Single-molecule epigenomic analysis for ONT long-read Fiber-seq data.
+Single-molecule epigenomic analysis for long-read Fiber-seq data.
 
 ## Overview
 
@@ -10,13 +10,15 @@ Single-molecule epigenomic analysis for ONT long-read Fiber-seq data.
 - 6mA-mediated chromatin accessibility
 - Nucleosome positioning
 
-...on individual Oxford Nanopore (ONT) long reads.
+...on individual long reads.
 
 The package uses an HDF5-backed storage layer with spatial indexing for genome-scale
 per-molecule queries.
 
 ONT extraction, database building, regional queries, and visualization are available.
-PacBio extraction is planned for a later release.
+PacBio Phase 1 support normalizes fibertools outputs into the same HDF5 schema for
+5mC, 6mA, MSP, and nucleosome layers. PacBio FIRE/co-accessibility storage is planned
+for a later extension.
 
 ## HDF5 Layout
 

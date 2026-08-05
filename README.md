@@ -8,13 +8,15 @@
 
 `PACKAGE` provides infrastructure for joint single-molecule analysis of DNA methylation,
 nucleosome positioning, and chromatin accessibility on individual long reads from Oxford
-Nanopore (ONT) experiments. It uses an HDF5-backed storage layer with
-spatial indexing for genome-scale per-molecule queries.
+Nanopore (ONT) and PacBio Fiber-seq experiments. It uses an HDF5-backed storage layer
+with spatial indexing for genome-scale per-molecule queries.
 
 ## Status
 
-**ONT alpha (v0.4.0).** ONT extraction, HDF5 building, regional queries, and
-single-molecule visualization have been validated end to end. APIs may still change.
+**Alpha (v0.4.0).** ONT extraction, HDF5 building, regional queries, and
+single-molecule visualization have been validated end to end. PacBio Phase 1 support
+normalizes fibertools outputs into the same HDF5 schema for 5mC, 6mA, MSP, and
+nucleosomes. APIs may still change.
 
 ## What it does
 
@@ -27,7 +29,7 @@ integration layer.
 
 | Layer | Module | Description |
 |-------|--------|-------------|
-| **Extraction** | `PACKAGE.extract` | Wraps `modkit` and `fibertools-rs` with validated ONT defaults |
+| **Extraction** | `PACKAGE.extract` | Wraps `modkit` and `fibertools-rs` with validated ONT defaults and PacBio normalization |
 | **Storage** | `PACKAGE.db` | HDF5 schema with spatial indexing and memory-mapped access |
 | **Visualization** | `PACKAGE.viz` | Per-molecule heatmap and related plots |
 | **Benchmark** | `PACKAGE.benchmark` | Reproducible scripts for performance and cross-platform figures |
@@ -79,6 +81,10 @@ with FiberDatabase("fiber_database.h5") as db:
     fig.savefig("ont_region.png", dpi=200)
 ```
 
+For PacBio data, use `PACKAGE extract --platform pacbio` with a PacBio config, or
+normalize existing `ft extract` outputs before building the database. See the
+[tutorial](docs/tutorial.md) for the tested PacBio smoke workflow.
+
 See the [step-by-step ONT workflow](STEP_BY_STEP_GITHUB.md),
 the [parameter reference](docs/parameters.md), and [`examples/`](examples/)
 for complete usage examples.
@@ -86,7 +92,12 @@ for complete usage examples.
 ## Supported platforms
 
 - **Oxford Nanopore (ONT)**: validated with `modkit extract` and `ft extract`
-- **PacBio**: planned; its extraction adapter is not implemented in this release
+- **PacBio Phase 1**: validated for fibertools-derived 5mC, 6mA, MSP, and
+  nucleosome layers after normalization into the shared HDF5 schema
+
+PacBio FIRE/co-accessibility scores are not yet stored as a dedicated HDF5 layer.
+The PacBio parser validates FIRE-related columns in `ft extract --all`, but packing
+those scores is planned as a later extension.
 
 ## Design philosophy
 
