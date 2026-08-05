@@ -12,7 +12,6 @@ from PACKAGE.extract.pacbio import (
     normalize_fibertools_block_bed,
 )
 
-
 _PACBIO_ALL = """\
 #ct\tst\ten\tfiber\tscore\tstrand\tsam_flag\tHP\tRG\tfiber_length\tec\trq\ttotal_AT_bp\ttotal_m6a_bp\ttotal_nuc_bp\ttotal_msp_bp\ttotal_5mC_bp\tnuc_starts\tnuc_lengths\tref_nuc_starts\tref_nuc_lengths\tmsp_starts\tmsp_lengths\tfire\tref_msp_starts\tref_msp_lengths\tm6a\tref_m6a\tm6a_qual\t5mC\tref_5mC\t5mC_qual
 chr1\t100\t500\tfiber_a\t8\t+\t0\tUNK\trg1\t400\t0\t1\t0\t2\t2\t2\t3\t0,100\t50,80\t100,200\t50,80\t0,120\t30,40\t0,244\t100,220\t30,40\t5,10\t105,110\t255,125\t7,9,12\t107,-1,112\t255,200,128
