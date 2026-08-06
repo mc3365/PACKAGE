@@ -253,6 +253,33 @@ def test_get_msp_fiber_with_no_msps_returns_empty(tiny_db_path_with_layers):
 
 
 # ---------------------------------------------------------------------------
+# get_fire_accessibility
+# ---------------------------------------------------------------------------
+def test_get_fire_accessibility_returns_arrays(tiny_db_path_with_layers):
+    """fiber1 has two ft-fire accessibility calls in the fixture."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        fire = db.get_fire_accessibility("fiber1", "chr1", sample="d0")
+    assert set(fire.keys()) == {"starts", "ends", "widths", "scores", "haplotypes"}
+    assert fire["starts"].tolist() == [120, 650]
+    assert fire["scores"].tolist() == pytest.approx([0.05, 1.01])
+    assert fire["haplotypes"].tolist() == [b"H1", b"H1"]
+
+
+def test_query_annotation_fast_summarizes_fire_accessibility(tiny_db_path_with_layers):
+    """Annotation queries should summarize overlapping FIRE accessibility calls."""
+    with FiberDatabase(tiny_db_path_with_layers) as db:
+        df = db.query_annotation_fast(
+            "CGI",
+            sample="d0",
+            feature_types=["fire_accessibility"],
+        )
+    assert len(df) == 1
+    assert df.iloc[0]["n_fire_accessibility"] == 2
+    assert df.iloc[0]["min_fire_score"] == pytest.approx(0.05)
+    assert df.iloc[0]["mean_fire_score"] == pytest.approx(0.53)
+
+
+# ---------------------------------------------------------------------------
 # _find_fiber_chromosome
 # ---------------------------------------------------------------------------
 def test_find_fiber_chromosome_returns_chrom(tiny_db_path_with_layers):

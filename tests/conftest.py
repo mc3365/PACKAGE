@@ -102,6 +102,20 @@ _MSP_SLICES = np.array(
     dtype=[("fiber_int_id", np.uint32), ("start", np.uint32), ("end", np.uint32)],
 )
 
+_FIRE_DATA = {
+    # fiber0: two FIRE/accessibility calls; fiber1: one call
+    "fiber_int_ids": np.array([0, 0, 1], dtype=np.uint32),
+    "starts": np.array([120, 650, 5200], dtype=np.uint32),
+    "ends": np.array([180, 760, 5300], dtype=np.uint32),
+    "widths": np.array([60, 110, 100], dtype=np.uint32),
+    "scores": np.array([0.05, 1.01, 0.25], dtype=np.float32),
+    "haplotypes": np.array([b"H1", b"H1", b"UNK"], dtype="S10"),
+}
+_FIRE_SLICES = np.array(
+    [(0, 0, 2), (1, 2, 3)],
+    dtype=[("fiber_int_id", np.uint32), ("start", np.uint32), ("end", np.uint32)],
+)
+
 
 @pytest.fixture
 def tiny_db_path_with_layers(tmp_path: Path) -> Path:
@@ -148,6 +162,7 @@ def tiny_db_path_with_layers(tmp_path: Path) -> Path:
             ("nucleosomes", _NUC_DATA, _NUC_SLICES),
             ("5mC",         _M5C_DATA, _M5C_SLICES),
             ("msp",         _MSP_DATA, _MSP_SLICES),
+            ("fire_accessibility", _FIRE_DATA, _FIRE_SLICES),
         ]:
             layer_grp = chrom.create_group(layer_name)
             for field, arr in layer_data.items():

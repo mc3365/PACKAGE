@@ -14,6 +14,7 @@ CLI and import the library directly.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import click
@@ -54,7 +55,8 @@ def extract(config_path: Path, platform: str, samples: tuple[str, ...]) -> None:
 
     ONT extraction wraps modkit (5mC/5hmC) and fibertools-rs (6mA, MSP,
     nucleosomes). PacBio extraction wraps fibertools-rs and normalizes 5mC, 6mA,
-    MSP, and nucleosome outputs for the shared HDF5 builder.
+    MSP, nucleosome, and optional FIRE/accessibility outputs for the shared HDF5
+    builder.
     """
     from PACKAGE.config import load_config
 
@@ -179,6 +181,87 @@ def info(db_path: Path) -> None:
         summary = db.get_summary()
     for key, value in summary.items():
         click.echo(f"  {key}: {value}")
+
+
+# ---------------------------------------------------------------------------
+# `PACKAGE coaccess` — PacBio FIRE co-accessibility helpers
+# ---------------------------------------------------------------------------
+@cli.group()
+def coaccess() -> None:
+    """Build PacBio FIRE co-accessibility inputs from a PACKAGE database."""
+
+
+@coaccess.command("cov")
+@click.option(
+    "--db",
+    "db_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="PACKAGE HDF5 database containing fire_accessibility.",
+)
+@click.option("--sample", default=None, help="Sample to query; defaults to the first sample.")
+@click.option(
+    "--stitched",
+    "stitched_bed",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="FIRE_stitched.bed path.",
+)
+@click.option(
+    "--peaks",
+    "peaks_bed",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="FIRE_peaks_intergenic.bed path.",
+)
+@click.option(
+    "--out",
+    "out_bed",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output Cov.bed path.",
+)
+def coaccess_cov(
+    db_path: Path,
+    sample: str | None,
+    stitched_bed: Path,
+    peaks_bed: Path,
+    out_bed: Path,
+) -> None:
+    """Export legacy-compatible Cov.bed from HDF5 FIRE accessibility calls."""
+    from PACKAGE.analysis.coaccessibility import export_coaccessibility_cov
+
+    summary = export_coaccessibility_cov(
+        db_path,
+        stitched_bed,
+        peaks_bed,
+        out_bed,
+        sample=sample,
+    )
+    click.echo(json.dumps(summary, indent=2))
+
+
+@coaccess.command("object")
+@click.option(
+    "--cov",
+    "cov_bed",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="Cov.bed path.",
+)
+@click.option(
+    "--out",
+    "out_json",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output JSON path.",
+)
+def coaccess_object(cov_bed: Path, out_json: Path) -> None:
+    """Convert Cov.bed to the legacy enhancer-by-fiber JSON object."""
+    from PACKAGE.analysis.coaccessibility import cov_to_object
+
+    summary = cov_to_object(cov_bed, out_json)
+    click.echo(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":

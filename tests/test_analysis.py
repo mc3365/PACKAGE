@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import csv
+import json
 
 import numpy as np
 
 from PACKAGE.analysis import (
+    cov_to_object,
     export_annotation_matrices,
     export_centered_annotation_matrices,
+    export_coaccessibility_cov,
     export_global_feature_fractions,
+    find_contained_peak_pairs,
 )
 from PACKAGE.analysis.heatmap import smooth_methylation
 
@@ -86,3 +90,62 @@ def test_smooth_methylation_does_not_zero_pad_edges():
     smoothed = smooth_methylation(values, sigma=50)
 
     assert np.allclose(smoothed[[0, -1]], 1.0)
+
+
+def test_find_contained_peak_pairs_matches_bedtools_f1_logic(tmp_path):
+    stitched = tmp_path / "FIRE_stitched.bed"
+    peaks = tmp_path / "FIRE_peaks_intergenic.bed"
+    stitched.write_text("chr1\t100\t800\nchr1\t1000\t1400\n")
+    peaks.write_text("chr1\t120\t180\nchr1\t200\t900\nchr1\t300\t350\nchr1\t650\t760\nchr1\t900\t950\n")
+
+    pairs = find_contained_peak_pairs(stitched, peaks)
+
+    assert [(p.element.region_id, p.stitched.region_id) for p in pairs] == [
+        ("chr1:120-180", "chr1:100-800"),
+        ("chr1:300-350", "chr1:100-800"),
+        ("chr1:650-760", "chr1:100-800"),
+    ]
+
+
+def test_export_coaccessibility_cov_writes_legacy_shape(tiny_db_path_with_layers, tmp_path):
+    stitched = tmp_path / "FIRE_stitched.bed"
+    peaks = tmp_path / "FIRE_peaks_intergenic.bed"
+    out = tmp_path / "Cov.bed"
+    stitched.write_text("chr1\t100\t850\n")
+    peaks.write_text("chr1\t120\t180\nchr1\t650\t760\n")
+
+    summary = export_coaccessibility_cov(
+        tiny_db_path_with_layers,
+        stitched,
+        peaks,
+        out,
+        sample="d0",
+    )
+
+    rows = [line.split("\t") for line in out.read_text().splitlines()]
+    assert summary["contained_peak_pairs"] == 2
+    assert summary["cov_rows"] == 2
+    assert rows == [
+        ["chr1", "120", "180", "chr1", "100", "850", "fiber1", "0.05", "60"],
+        ["chr1", "650", "760", "chr1", "100", "850", "fiber1", "1.01", "110"],
+    ]
+
+
+def test_cov_to_object_matches_legacy_obj_shape(tmp_path):
+    cov = tmp_path / "Cov.bed"
+    out = tmp_path / "scored_obj.json"
+    cov.write_text(
+        "chr1\t120\t180\tchr1\t100\t850\tfiber1\t0.05\t60\n"
+        "chr1\t650\t760\tchr1\t100\t850\tfiber1\t1.01\t110\n"
+        "chr1\t650\t760\tchr1\t100\t850\tfiber2\t0.25\t20\n"
+    )
+
+    summary = cov_to_object(cov, out)
+    data = json.loads(out.read_text())
+
+    assert summary["stitched_regions"] == 1
+    assert data[0]["seId"] == "chr1:100-850"
+    assert data[0]["enhs"][0]["enhId"] == "chr1:120-180"
+    assert data[0]["enhs"][0]["fibers"] == [0.05, None]
+    assert data[0]["enhs"][1]["enhId"] == "chr1:650-760"
+    assert data[0]["enhs"][1]["fibers"] == [1.01, None]

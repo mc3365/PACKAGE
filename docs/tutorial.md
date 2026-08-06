@@ -41,18 +41,20 @@ PACKAGE query \
   --sample sample1
 ```
 
-## PacBio Phase 1 Workflow
+## PacBio Workflow
 
-PacBio support currently covers the shared Phase 1 layers:
+PacBio support currently covers:
 
 - nucleosomes;
 - 5mC;
 - 6mA;
-- MSPs.
+- MSPs;
+- optional FIRE/accessibility calls from `ft fire --extract`.
 
-PacBio 5hmC is not produced by this pathway. FIRE/co-accessibility scores are
-validated from `ft extract --all` when present, but they are not yet stored as a
-dedicated HDF5 layer.
+PacBio 5hmC is not produced by this pathway. The optional `fire_accessibility`
+layer stores the legacy co-accessibility input from `acc.model.results.bed`: column
+10 is the FIRE/accessibility model score and column 11 is the haplotype when present.
+This is distinct from the raw 0-255 `fire` list in `ft extract --all`.
 
 ### Prepare raw fibertools outputs
 
@@ -68,6 +70,10 @@ ft extract \
   --all pacbio_all.tsv.gz \
   --simplify \
   yaleFiberAug19_2025.fire.bam
+
+ft fire --extract \
+  yaleFiberAug19_2025.fire.bam \
+  acc.model.results.bed
 ```
 
 `pacbio_5mc.bed.gz` is useful for inspection, but PACKAGE uses
@@ -87,6 +93,7 @@ intermediate formats used by the HDF5 builder:
 | `pacbio_6ma.bed.gz` | BED12-style 6mA |
 | `pacbio_msp.bed.gz` | BED12-style MSP |
 | `pacbio_nuc.bed.gz` | flattened nucleosome CSV |
+| `acc.model.results.bed` | optional `fire_accessibility` layer |
 
 For an already extracted test directory:
 
@@ -176,6 +183,7 @@ samples:
       5mC: /path/to/package_test/pacbio_5mc_for_PACKAGE.tsv.gz
       6mA: /path/to/package_test/pacbio_6ma_for_PACKAGE.bed
       msp: /path/to/package_test/pacbio_msp_for_PACKAGE.bed
+      fire_accessibility: /path/to/package_test/acc.model.results.bed
 
 annotations:
   master: /path/to/master_annotations_basic.uniqueID.bed
@@ -218,6 +226,7 @@ with FiberDatabase(db) as fdb:
         print("5mC:", fdb.get_methylation(first, chrom, mod_type="5mC", sample=sample))
         print("6mA:", fdb.get_methylation(first, chrom, mod_type="6mA", sample=sample))
         print("MSP:", fdb.get_msp(first, chrom, sample=sample))
+        print("FIRE:", fdb.get_fire_accessibility(first, chrom, sample=sample))
 PY
 ```
 
@@ -242,25 +251,51 @@ with FiberDatabase(db) as fdb:
         "CGI",
         sample="pacbio_test",
         max_regions=50,
-        feature_types=["nucleosomes", "5mC", "6mA", "msp"],
+        feature_types=["nucleosomes", "5mC", "6mA", "msp", "fire_accessibility"],
     )
     print(result.shape)
     print(result.head())
 PY
 ```
 
+### FIRE co-accessibility inputs
+
+If the PacBio HDF5 was built with `fire_accessibility`, PACKAGE can regenerate the
+legacy `Cov.bed` input used by the old co-accessibility workflow. This uses:
+
+- `FIRE_stitched.bed`: stitched FIRE regions;
+- `FIRE_peaks_intergenic.bed`: constituent/intergenic FIRE peaks;
+- the HDF5 `fire_accessibility` layer from `ft fire --extract`.
+
+```bash
+PACKAGE coaccess cov \
+  --db /path/to/output/pacbio_fiber_database.h5 \
+  --sample pacbio_test \
+  --stitched /path/to/FIRE_stitched.bed \
+  --peaks /path/to/FIRE_peaks_intergenic.bed \
+  --out /path/to/Cov_PACKAGE.bed
+```
+
+The output has the same nine columns as the legacy file:
+
+```text
+element_chr  element_start  element_end  stitched_chr  stitched_start  stitched_end  fiber_id  fire_score  overlap_bp
+```
+
+To make the legacy enhancer-by-fiber JSON object:
+
+```bash
+PACKAGE coaccess object \
+  --cov /path/to/Cov_PACKAGE.bed \
+  --out /path/to/scored_PACKAGE_obj.json
+```
+
 ### Current update behavior
 
 HDF5 technically supports append-mode updates, but PACKAGE currently treats a
 database build as a reproducible artifact: annotations and molecular layers are
-written during `PACKAGE build`. To add annotations, rebuild from the same
-intermediate files with `annotations.master` included.
-
-The same applies to future FIRE/co-accessibility storage. If a new FIRE layer is
-added to the schema, existing HDF5 files will need either a rebuild or a dedicated
-migration/append command. That append command is not implemented yet because it
-needs careful validation to avoid silently mixing layers from different extraction
-runs.
+written during `PACKAGE build`. To add annotations or `fire_accessibility`, rebuild
+from the same intermediate files with those paths included.
 
 ## How a Query Uses the Database
 

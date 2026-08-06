@@ -55,7 +55,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # but defined here to avoid a circular import (the config is used before the schema is
 # loaded in some import orders).
 _VALID_LAYER_NAMES: frozenset[str] = frozenset(
-    {"nucleosomes", "5mC", "5hmC", "6mA", "msp"}
+    {"nucleosomes", "5mC", "5hmC", "6mA", "msp", "fire_accessibility"}
 )
 
 
@@ -78,7 +78,7 @@ class SampleConfig(BaseModel):
     layers: dict[str, Path] = Field(
         description=(
             "Per-layer file paths. 'nucleosomes' is required; other layers "
-            "(5mC, 5hmC, 6mA, msp) are optional and skipped if absent."
+            "(5mC, 5hmC, 6mA, msp, fire_accessibility) are optional and skipped if absent."
         ),
     )
 

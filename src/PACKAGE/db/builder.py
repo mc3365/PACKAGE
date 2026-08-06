@@ -11,8 +11,8 @@ This is a refactor of ``build_fiber_database_v8.py`` with the following changes 
     explicit in the YAML, giving full flexibility.
   - The set of layers built per sample is configurable. Only the ``nucleosomes``
     layer is required (it defines which fibers exist on each chromosome);
-    ``5mC``, ``5hmC``, ``6mA``, and ``msp`` are optional and skipped if their
-    paths aren't listed in the sample config.
+    ``5mC``, ``5hmC``, ``6mA``, ``msp``, and ``fire_accessibility`` are optional
+    and skipped if their paths aren't listed in the sample config.
   - All HDF5 paths come from :mod:`PACKAGE.db.schema` instead of inline string
     literals (matches the convention established by the query layer).
   - Logging via :func:`PACKAGE.utils.get_logger` replaces V8's print statements.
@@ -218,6 +218,74 @@ class FiberDatabaseBuilder:
                     result[chrom]["widths"].append(size)
         return dict(result)
 
+    def parse_fire_accessibility_bed(
+        self,
+        filepath: Path,
+        known_fibers: dict[str, set[bytes]],
+    ) -> dict[str, dict[str, list]]:
+        """Parse ``ft fire --extract`` accessibility calls.
+
+        The legacy co-accessibility workflow consumes ``acc.model.results.sort.bed``
+        produced by ``ft fire --extract``.  Its biologically meaningful fields are:
+
+        - columns 1-3: accessibility interval on the reference
+        - column 4: fiber/read ID
+        - column 10: FIRE/accessibility model score
+        - column 11: haplotype, when present
+
+        This is deliberately separate from the raw 0-255 ``fire`` list in
+        ``ft extract --all``.
+        """
+        result: dict[str, dict[str, list]] = defaultdict(
+            lambda: {
+                "fids": [],
+                "starts": [],
+                "ends": [],
+                "widths": [],
+                "scores": [],
+                "haplotypes": [],
+            }
+        )
+        with smart_open(filepath) as f:
+            for line_number, line in enumerate(
+                tqdm(f, desc=f"  {filepath.name}", unit_scale=True), start=1
+            ):
+                if not line.strip() or line.startswith("#"):
+                    continue
+                cols = line.rstrip("\n").split()
+                if len(cols) < 10:
+                    continue
+                chrom = cols[0]
+                if chrom not in known_fibers:
+                    continue
+                read_id = cols[3].encode()
+                if read_id not in known_fibers[chrom]:
+                    continue
+                try:
+                    start = int(cols[1])
+                    end = int(cols[2])
+                    score = float(cols[9])
+                except ValueError:
+                    log.warning(
+                        "Skipping malformed FIRE accessibility row "
+                        f"{filepath}:{line_number}"
+                    )
+                    continue
+                if end < start:
+                    log.warning(
+                        "Skipping FIRE accessibility row with end < start "
+                        f"{filepath}:{line_number}"
+                    )
+                    continue
+                haplotype = cols[10] if len(cols) > 10 else "UNK"
+                result[chrom]["fids"].append(read_id)
+                result[chrom]["starts"].append(start)
+                result[chrom]["ends"].append(end)
+                result[chrom]["widths"].append(end - start)
+                result[chrom]["scores"].append(score)
+                result[chrom]["haplotypes"].append(haplotype.encode())
+        return dict(result)
+
     def parse_modkit_extract(
         self,
         filepath: Path,
@@ -383,12 +451,14 @@ class FiberDatabaseBuilder:
         hmc_data: dict[str, dict[str, list]] | None = None,
         ma_data: dict[str, dict[str, list]] | None = None,
         msp_data: dict[str, dict[str, list]] | None = None,
+        fire_data: dict[str, dict[str, list]] | None = None,
     ) -> dict[str, np.ndarray | int]:
         """Assemble all arrays for one chromosome in schema-compatible order."""
         mc_data = mc_data or {}
         hmc_data = hmc_data or {}
         ma_data = ma_data or {}
         msp_data = msp_data or {}
+        fire_data = fire_data or {}
 
         fm = fiber_meta[fiber_meta["chrom"] == chrom].sort_values("read_id")
         nuc_chrom = nuc_df[nuc_df["chrom"] == chrom]
@@ -455,6 +525,18 @@ class FiberDatabaseBuilder:
             str_to_int,
         )
 
+        fire_int_fids, fire_sorted = self._sort_and_assemble(
+            fire_data.get(chrom, {}).get("fids", []),
+            {
+                "starts": fire_data.get(chrom, {}).get("starts", []),
+                "ends": fire_data.get(chrom, {}).get("ends", []),
+                "widths": fire_data.get(chrom, {}).get("widths", []),
+                "scores": fire_data.get(chrom, {}).get("scores", []),
+                "haplotypes": fire_data.get(chrom, {}).get("haplotypes", []),
+            },
+            str_to_int,
+        )
+
         return {
             "n_fibers": len(fm),
             "fiber_id_table": fiber_id_table,
@@ -480,6 +562,12 @@ class FiberDatabaseBuilder:
             "msp_starts": msp_sorted.get("starts", np.array([], dtype=np.int32)).astype(np.uint32),
             "msp_ends": msp_sorted.get("ends", np.array([], dtype=np.int32)).astype(np.uint32),
             "msp_widths": msp_sorted.get("widths", np.array([], dtype=np.int32)).astype(np.uint32),
+            "fire_int_ids": fire_int_fids,
+            "fire_starts": fire_sorted.get("starts", np.array([], dtype=np.int32)).astype(np.uint32),
+            "fire_ends": fire_sorted.get("ends", np.array([], dtype=np.int32)).astype(np.uint32),
+            "fire_widths": fire_sorted.get("widths", np.array([], dtype=np.int32)).astype(np.uint32),
+            "fire_scores": fire_sorted.get("scores", np.array([], dtype=np.float32)).astype(np.float32),
+            "fire_haplotypes": fire_sorted.get("haplotypes", np.array([], dtype="S10")).astype("S10"),
         }
 
     # ------------------------------------------------------------------
@@ -540,6 +628,15 @@ class FiberDatabaseBuilder:
             self._create_dataset(mg, "ends", data["msp_ends"])
             self._create_dataset(mg, "widths", data["msp_widths"])
 
+        if len(data["fire_starts"]) > 0:
+            fg = cg.create_group("fire_accessibility")
+            self._create_dataset(fg, "fiber_int_ids", data["fire_int_ids"])
+            self._create_dataset(fg, "starts", data["fire_starts"])
+            self._create_dataset(fg, "ends", data["fire_ends"])
+            self._create_dataset(fg, "widths", data["fire_widths"])
+            self._create_dataset(fg, "scores", data["fire_scores"])
+            self._create_dataset(fg, "haplotypes", data["fire_haplotypes"])
+
         sample_grp.file.flush()
 
     def _build_indices(
@@ -556,6 +653,7 @@ class FiberDatabaseBuilder:
             ("5hmC", data["hmc_int_ids"]),
             ("6mA", data["ma_int_ids"]),
             ("msp", data["msp_int_ids"]),
+            ("fire_accessibility", data["fire_int_ids"]),
         ]:
             if len(fid_arr) == 0:
                 continue
@@ -605,6 +703,7 @@ class FiberDatabaseBuilder:
         dict[str, dict[str, list]],
         dict[str, dict[str, list]],
         dict[str, dict[str, list]],
+        dict[str, dict[str, list]],
     ]:
         """Parse optional layers configured for one sample."""
         layers = sample_config.layers
@@ -612,6 +711,7 @@ class FiberDatabaseBuilder:
         hmc_data: dict[str, dict[str, list]] = {}
         ma_data: dict[str, dict[str, list]] = {}
         msp_data: dict[str, dict[str, list]] = {}
+        fire_data: dict[str, dict[str, list]] = {}
 
         want_5mc = "5mC" in layers
         want_5hmc = "5hmC" in layers
@@ -647,7 +747,14 @@ class FiberDatabaseBuilder:
                 min_size=self.min_msp_size,
             )
 
-        return mc_data, hmc_data, ma_data, msp_data
+        if "fire_accessibility" in layers:
+            log.info(f"  Loading FIRE accessibility BED: {layers['fire_accessibility'].name}")
+            fire_data = self.parse_fire_accessibility_bed(
+                layers["fire_accessibility"],
+                known_fibers,
+            )
+
+        return mc_data, hmc_data, ma_data, msp_data, fire_data
 
     @staticmethod
     def _merge_layer_data(
@@ -680,7 +787,7 @@ class FiberDatabaseBuilder:
             f"{len(fiber_meta):,} fibers, {len(chromosomes)} chromosomes"
         )
 
-        mc_data, hmc_data, ma_data, msp_data = self._parse_sample_layers(
+        mc_data, hmc_data, ma_data, msp_data, fire_data = self._parse_sample_layers(
             sample_config, known_fibers
         )
 
@@ -695,6 +802,7 @@ class FiberDatabaseBuilder:
                 hmc_data=hmc_data,
                 ma_data=ma_data,
                 msp_data=msp_data,
+                fire_data=fire_data,
             )
             self._write_chrom_data(sample_grp, chrom, data)
             self._build_indices(sample_grp, chrom, data)
@@ -710,7 +818,7 @@ class FiberDatabaseBuilder:
         sample_grp.attrs["n_fibers"] = len(all_fiber_ids)
         log.info(f"Sample {sample_config.name} complete: {len(all_fiber_ids):,} fibers")
 
-        del nuc_df, fiber_meta, mc_data, hmc_data, ma_data, msp_data
+        del nuc_df, fiber_meta, mc_data, hmc_data, ma_data, msp_data, fire_data
         gc.collect()
 
     def _write_fiber_lookup(

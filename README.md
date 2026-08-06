@@ -15,8 +15,9 @@ with spatial indexing for genome-scale per-molecule queries.
 
 **Alpha (v0.4.0).** ONT extraction, HDF5 building, regional queries, and
 single-molecule visualization have been validated end to end. PacBio Phase 1 support
-normalizes fibertools outputs into the same HDF5 schema for 5mC, 6mA, MSP, and
-nucleosomes. APIs may still change.
+normalizes fibertools outputs into the same HDF5 schema for 5mC, 6mA, MSP,
+nucleosomes, and optional FIRE/accessibility calls from `ft fire --extract`. APIs may
+still change.
 
 ## What it does
 
@@ -92,12 +93,13 @@ for complete usage examples.
 ## Supported platforms
 
 - **Oxford Nanopore (ONT)**: validated with `modkit extract` and `ft extract`
-- **PacBio Phase 1**: validated for fibertools-derived 5mC, 6mA, MSP, and
-  nucleosome layers after normalization into the shared HDF5 schema
+- **PacBio**: validated for fibertools-derived 5mC, 6mA, MSP, nucleosome, and
+  optional `ft fire --extract` accessibility-call layers after normalization into the
+  shared HDF5 schema
 
-PacBio FIRE/co-accessibility scores are not yet stored as a dedicated HDF5 layer.
-The PacBio parser validates FIRE-related columns in `ft extract --all`, but packing
-those scores is planned as a later extension.
+The package stores the FIRE/accessibility input layer needed by the legacy
+co-accessibility workflow. The full co-accessibility ranking analysis is still a
+downstream analysis module to add on top of this layer.
 
 ## Design philosophy
 

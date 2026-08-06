@@ -45,6 +45,13 @@ chr1\t1000\t2000\tfiber_a\t0\t+\t1000\t2000\t147,112,219\t4\t1,50,8,1\t0,100,500
 chr1\t1000\t2000\tfiber_b\t0\t+\t1000\t2000\t147,112,219\t3\t1,80,1\t0,200,1000
 """
 
+_FIRE_ACCESSIBILITY_TEXT = """\
+chr1\t110\t170\tfiber_a\t100\t+\t110\t170\t147,112,219\t0.05\tH1
+chr1\t500\t760\tfiber_b\t101\t+\t500\t760\t169,169,169\t1.01\tUNK
+chr1\t900\t950\tfiber_unknown\t101\t+\t900\t950\t169,169,169\t1.01\tUNK
+chr2\t100\t150\tfiber_c\t101\t+\t100\t150\t169,169,169\t0.25\tH2
+"""
+
 # modkit `extract full` TSV — first line is header (we skip it).
 # Real header has ~20 columns but our parser only uses 5 of them (cols 0,2,3,12,13).
 # We pad with dummies to reach >= 14 cols.
@@ -270,6 +277,25 @@ def test_parse_bed12_intervals_no_min_size_keeps_all(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# parse_fire_accessibility_bed (ft fire --extract format)
+# ---------------------------------------------------------------------------
+def test_parse_fire_accessibility_bed_uses_column_10_scores(tmp_path):
+    builder = _make_builder(tmp_path)
+    fire_path = _write(tmp_path, "acc.model.results.sort.bed", _FIRE_ACCESSIBILITY_TEXT)
+    known = {"chr1": {b"fiber_a", b"fiber_b"}}
+
+    result = builder.parse_fire_accessibility_bed(fire_path, known)
+
+    assert result["chr1"]["fids"] == [b"fiber_a", b"fiber_b"]
+    assert result["chr1"]["starts"] == [110, 500]
+    assert result["chr1"]["ends"] == [170, 760]
+    assert result["chr1"]["widths"] == [60, 260]
+    assert result["chr1"]["scores"] == [0.05, 1.01]
+    assert result["chr1"]["haplotypes"] == [b"H1", b"UNK"]
+    assert "chr2" not in result
+
+
+# ---------------------------------------------------------------------------
 # parse_modkit_extract (5mC + 5hmC)
 # ---------------------------------------------------------------------------
 def test_parse_modkit_extract_routes_to_both_layers(tmp_path):
@@ -411,15 +437,25 @@ def _assembly_inputs():
     hmc_data = {"chr1": {"fids": [b"fiber_a"], "pos": [150], "prob": [0.20]}}
     ma_data = {"chr1": {"fids": [b"fiber_b", b"fiber_a"], "pos": [740, 130]}}
     msp_data = {"chr1": {"fids": [b"fiber_b"], "starts": [705], "ends": [760], "widths": [55]}}
-    return nuc_df, fiber_meta, mc_data, hmc_data, ma_data, msp_data
+    fire_data = {
+        "chr1": {
+            "fids": [b"fiber_b", b"fiber_a"],
+            "starts": [700, 110],
+            "ends": [760, 170],
+            "widths": [60, 60],
+            "scores": [1.01, 0.05],
+            "haplotypes": [b"UNK", b"H1"],
+        }
+    }
+    return nuc_df, fiber_meta, mc_data, hmc_data, ma_data, msp_data, fire_data
 
 
 def test_assemble_chromosome_data_matches_v8_sorting_and_threshold(tmp_path):
     builder = _make_builder(tmp_path)
-    nuc_df, fiber_meta, mc_data, hmc_data, ma_data, msp_data = _assembly_inputs()
+    nuc_df, fiber_meta, mc_data, hmc_data, ma_data, msp_data, fire_data = _assembly_inputs()
 
     data = builder.assemble_chromosome_data(
-        "chr1", fiber_meta, nuc_df, mc_data, hmc_data, ma_data, msp_data
+        "chr1", fiber_meta, nuc_df, mc_data, hmc_data, ma_data, msp_data, fire_data
     )
 
     # Sorted unique read IDs define per-chromosome integer IDs.
@@ -439,13 +475,16 @@ def test_assemble_chromosome_data_matches_v8_sorting_and_threshold(tmp_path):
     assert data["hmc_int_ids"].tolist() == [0]
     assert data["ma_int_ids"].tolist() == [0, 1]
     assert data["msp_int_ids"].tolist() == [1]
+    assert data["fire_int_ids"].tolist() == [0, 1]
+    assert data["fire_scores"].tolist() == pytest.approx([0.05, 1.01])
+    assert data["fire_haplotypes"].tolist() == [b"H1", b"UNK"]
 
 
 def test_write_chrom_data_and_indices_round_trip_through_fiber_database(tmp_path):
     builder = _make_builder(tmp_path)
-    nuc_df, fiber_meta, mc_data, hmc_data, ma_data, msp_data = _assembly_inputs()
+    nuc_df, fiber_meta, mc_data, hmc_data, ma_data, msp_data, fire_data = _assembly_inputs()
     data = builder.assemble_chromosome_data(
-        "chr1", fiber_meta, nuc_df, mc_data, hmc_data, ma_data, msp_data
+        "chr1", fiber_meta, nuc_df, mc_data, hmc_data, ma_data, msp_data, fire_data
     )
 
     db_path = tmp_path / "assembled.h5"
@@ -483,6 +522,11 @@ def test_write_chrom_data_and_indices_round_trip_through_fiber_database(tmp_path
         assert "5hmC" in hf["d0/chr1"]
         assert "6mA" in hf["d0/chr1"]
         assert "msp" in hf["d0/chr1"]
+        assert "fire_accessibility" in hf["d0/chr1"]
+        assert hf["d0/chr1/_indices/fire_accessibility_slices"][:].tolist() == [
+            (0, 0, 1),
+            (1, 1, 2),
+        ]
 
     with FiberDatabase(db_path) as db:
         nuc = db.get_nucleosomes("fiber_a", "chr1", sample="d0")
@@ -497,6 +541,10 @@ def test_write_chrom_data_and_indices_round_trip_through_fiber_database(tmp_path
 
         msp = db.get_msp("fiber_b", "chr1", sample="d0")
         assert msp["starts"].tolist() == [705]
+
+        fire = db.get_fire_accessibility("fiber_a", "chr1", sample="d0")
+        assert fire["starts"].tolist() == [110]
+        assert fire["scores"].tolist() == pytest.approx([0.05])
 
 
 def test_write_chrom_data_skips_absent_optional_layers(tmp_path):
@@ -534,6 +582,7 @@ def test_build_database_end_to_end_from_extracted_files(tmp_path):
     mods_path = _write(tmp_path, "raw_mods.tsv", _MODKIT_TEXT)
     ma_path = _write(tmp_path, "6ma.bed", _BED12_6MA_TEXT)
     msp_path = _write(tmp_path, "msp.bed", _BED12_MSP_TEXT)
+    fire_path = _write(tmp_path, "fire.bed", _FIRE_ACCESSIBILITY_TEXT)
     anno_path = _write(
         tmp_path,
         "master.bed",
@@ -556,6 +605,7 @@ def test_build_database_end_to_end_from_extracted_files(tmp_path):
                     "5hmC": str(mods_path),
                     "6mA": str(ma_path),
                     "msp": str(msp_path),
+                    "fire_accessibility": str(fire_path),
                 },
             }
         ],
@@ -569,6 +619,7 @@ def test_build_database_end_to_end_from_extracted_files(tmp_path):
     with h5py.File(cfg.output_path, "r") as hf:
         assert "d0/chr1/fiber_id_table" in hf
         assert "d0/chr1/_indices/nucleosomes_slices" in hf
+        assert "d0/chr1/_indices/fire_accessibility_slices" in hf
         assert "d0/fiber_lookup/fiber_ids" in hf
         assert "annotations/master/features/CGI" in hf
         assert hf["metadata"].attrs["methylation_threshold"] == 0.5
@@ -588,3 +639,12 @@ def test_build_database_end_to_end_from_extracted_files(tmp_path):
         df = db.query_annotation_fast("CGI", sample="d0", max_regions=1)
         assert set(df["fiber_id"]) == {"fiber_a"}
         assert df.iloc[0]["n_nucleosomes"] == 2
+
+        fire_df = db.query_annotation_fast(
+            "CGI",
+            sample="d0",
+            feature_types=["fire_accessibility"],
+            max_regions=1,
+        )
+        assert fire_df.iloc[0]["n_fire_accessibility"] == 1
+        assert fire_df.iloc[0]["min_fire_score"] == pytest.approx(0.05)

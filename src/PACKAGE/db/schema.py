@@ -58,6 +58,9 @@ Layout
             |
             +-- msp/                   (fiber_int_ids, starts, ends, widths)
             |
+            +-- fire_accessibility/    (fiber_int_ids, starts, ends, widths,
+            |                           scores, haplotypes)
+            |
             +-- _indices/              (slice-into-array lookup tables, keyed by uint32)
                 +-- nucleosomes_slices
                 +-- 5mC_slices
@@ -99,7 +102,14 @@ RESERVED_TOP_LEVEL: frozenset[str] = frozenset({"annotations", "metadata"})
 # Supported modification layers
 # ---------------------------------------------------------------------------
 
-SUPPORTED_LAYERS: tuple[str, ...] = ("5mC", "5hmC", "6mA", "msp", "nucleosomes")
+SUPPORTED_LAYERS: tuple[str, ...] = (
+    "5mC",
+    "5hmC",
+    "6mA",
+    "msp",
+    "nucleosomes",
+    "fire_accessibility",
+)
 """All modification/feature layers the schema knows about.
 
 Each sample / chromosome stores whichever subset was extracted. Layer names here are
@@ -114,6 +124,14 @@ LAYER_FIELDS: dict[str, tuple[str, ...]] = {
     "5hmC":        ("fiber_int_ids", "positions", "probabilities", "is_methylated"),
     "6mA":         ("fiber_int_ids", "positions"),
     "msp":         ("fiber_int_ids", "starts", "ends", "widths"),
+    "fire_accessibility": (
+        "fiber_int_ids",
+        "starts",
+        "ends",
+        "widths",
+        "scores",
+        "haplotypes",
+    ),
 }
 
 

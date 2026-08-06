@@ -17,8 +17,9 @@ per-molecule queries.
 
 ONT extraction, database building, regional queries, and visualization are available.
 PacBio Phase 1 support normalizes fibertools outputs into the same HDF5 schema for
-5mC, 6mA, MSP, and nucleosome layers. PacBio FIRE/co-accessibility storage is planned
-for a later extension.
+5mC, 6mA, MSP, nucleosome, and optional FIRE/accessibility-call layers. The full
+co-accessibility ranking workflow remains a downstream analysis module to add on top
+of this stored layer.
 
 ## HDF5 Layout
 

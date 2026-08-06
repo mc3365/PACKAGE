@@ -1,11 +1,11 @@
 # Parameter Reference
 
-This page lists user-facing parameters for ONT and PacBio Phase 1 workflows. It is
+This page lists user-facing parameters for ONT and PacBio workflows. It is
 organized by workflow stage: extraction, HDF5 build, query, benchmark, and plotting.
 
-ONT is validated end to end. PacBio Phase 1 normalizes fibertools outputs into the
-same HDF5 schema for nucleosomes, 5mC, 6mA, and MSPs. PacBio 5hmC and FIRE
-score/co-accessibility HDF5 layers are not yet built.
+ONT is validated end to end. PacBio normalizes fibertools outputs into the same
+HDF5 schema for nucleosomes, 5mC, 6mA, MSPs, and optional FIRE/accessibility calls.
+PacBio 5hmC is not currently built.
 
 ## YAML Configuration
 
@@ -24,6 +24,7 @@ every `/path/to` value.
 | `samples[].layers.5hmC` | optional | ONT only: modkit `extract full` TSV or TSV.GZ. Usually the same file as `5mC`. |
 | `samples[].layers.6mA` | optional | Fibertools `ft extract --m6a` BED output. PacBio extraction normalizes this to builder-compatible BED12. |
 | `samples[].layers.msp` | optional | Fibertools `ft extract --msp` BED output. PacBio extraction normalizes this to builder-compatible BED12. |
+| `samples[].layers.fire_accessibility` | optional | PacBio `ft fire --extract` BED output for legacy co-accessibility-style accessibility calls. PACKAGE stores column 10 as the FIRE/accessibility score. |
 | `annotations` | optional | Named BED annotation files loaded into the HDF5 database during build. Rebuild the database to add annotations if they were omitted. |
 | `parameters.methylation_threshold` | yes | Probability cutoff used to create binary 5mC/5hmC calls during HDF5 build. The validated ONT value is `0.5`. Raw probabilities are also retained. |
 | `parameters.min_msp_size` | yes | Minimum MSP interval size kept during HDF5 build. |
@@ -76,6 +77,7 @@ PacBio outputs:
 - `<sample>_5mc_for_PACKAGE.tsv.gz`: modkit-like 5mC TSV created from `ft extract --all`.
 - `<sample>_6ma_for_PACKAGE.bed`: normalized BED12 6mA file.
 - `<sample>_msp_for_PACKAGE.bed`: normalized BED12 MSP file.
+- `<sample>_acc.model.results.bed`: optional `ft fire --extract` FIRE/accessibility calls when `fire_accessibility` is configured.
 - `<sample>_nuc_features.csv`: flattened nucleosome table used by the builder.
 - raw sidecar files such as `<sample>.fibertools_all.tsv.gz` and `<sample>.raw.bed` may be kept for inspection.
 - `PACKAGE_manifest_<sample>.json`: extraction QC, conversion QC, and provenance when enabled.
@@ -101,8 +103,8 @@ writes `<output_file>.index.pkl` beside the HDF5 file. Keep the sidecar with the
 database for fast region queries.
 
 Annotations and molecular layers are written during the build. PACKAGE does not yet
-provide a command to append annotations or FIRE/co-accessibility layers to an existing
-HDF5 file in place; rebuild from the same intermediate files when adding those inputs.
+provide a command to append annotations or molecular layers to an existing HDF5 file
+in place; rebuild from the same intermediate files when adding those inputs.
 
 ## Info And Region Query
 
@@ -127,6 +129,36 @@ PACKAGE query \
 | `--region` | yes | Genomic interval in `chrom:start-end` form. |
 | `--sample` | no | Restrict query to one sample. If omitted, all samples are searched. |
 | `--out` | no | Write overlapping fiber IDs to a text file. If omitted, only the count is printed. |
+
+## PacBio FIRE Co-Accessibility Inputs
+
+```bash
+PACKAGE coaccess cov \
+  --db /path/to/pacbio_fiber_database.h5 \
+  --sample pacbio_test \
+  --stitched /path/to/FIRE_stitched.bed \
+  --peaks /path/to/FIRE_peaks_intergenic.bed \
+  --out /path/to/Cov_PACKAGE.bed
+```
+
+| Option | Required | Meaning |
+| --- | --- | --- |
+| `--db` | yes | HDF5 database built with the `fire_accessibility` layer. |
+| `--sample` | no | Sample queried. Defaults to the first sample. |
+| `--stitched` | yes | BED3 file of stitched FIRE regions. |
+| `--peaks` | yes | BED3 file of constituent/intergenic FIRE peaks. |
+| `--out` | yes | Output nine-column `Cov.bed` path. |
+
+```bash
+PACKAGE coaccess object \
+  --cov /path/to/Cov_PACKAGE.bed \
+  --out /path/to/scored_PACKAGE_obj.json
+```
+
+| Option | Required | Meaning |
+| --- | --- | --- |
+| `--cov` | yes | Nine-column `Cov.bed` produced by `PACKAGE coaccess cov` or the legacy script. |
+| `--out` | yes | JSON object path using the old enhancer-by-fiber structure. |
 
 ## Random-Region Benchmark
 
@@ -180,7 +212,7 @@ python -m PACKAGE.benchmark.annotation \
 | `--outdir` | required | Directory for annotation benchmark outputs. |
 | `--sample` | required | Sample queried. |
 | `--annotation` | required | Annotation class to query. Repeat for multiple classes. |
-| `--layers` | `nucleosomes 5mC` | Layers passed to `FiberDatabase.query_annotation_fast`. |
+| `--layers` | `nucleosomes 5mC` | Layers passed to `FiberDatabase.query_annotation_fast`. Can include `fire_accessibility` for PacBio databases built with that layer. |
 | `--max-regions` | all regions | Limit the number of annotation regions. Useful for smoke tests. |
 | `--repeats` | `3` | Timed repeats. |
 | `--warmups` | `1` | Untimed warm-up queries before timing. |

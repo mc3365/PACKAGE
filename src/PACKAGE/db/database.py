@@ -5,9 +5,9 @@ This is the **library face** of the storage layer. It is a refactor of the exist
 
   - All HDF5 paths come from :mod:`PACKAGE.db.schema` instead of inline string literals
   - The spatial-index code is split into :mod:`PACKAGE.db.spatial_index`
-  - FIRE-specific methods removed: FIRE peaks are stored as regular annotations in the
-    master annotation file (consistent with the package's design that no annotation
-    category gets special schema treatment)
+  - FIRE peak annotations are stored as regular annotations in the master annotation
+    file. Per-fiber ``ft fire --extract`` accessibility calls are stored separately
+    as the optional ``fire_accessibility`` layer.
   - Backward-compatible reading of databases built with the V8 ``master_v3/`` path
   - One small correctness fix: the array-scan fallback in :meth:`get_fibers_at` now
     uses strict half-open overlap semantics, matching the IntervalTree code path
@@ -424,6 +424,29 @@ class FiberDatabase:
             "widths": self.db[f"{base}/widths"][s:e],
         }
 
+    def get_fire_accessibility(
+        self, fiber_id: str, chrom: str, sample: str | None = None
+    ) -> dict[str, np.ndarray]:
+        """Return one fiber's ``ft fire --extract`` accessibility intervals.
+
+        Returns:
+            Dict with keys ``starts``, ``ends``, ``widths``, ``scores``, and
+            ``haplotypes``. Empty if the layer is missing or the fiber has no calls.
+        """
+        sample = sample or self.samples[0]
+        sl = self._get_fiber_slice(fiber_id, chrom, sample, "fire_accessibility")
+        if sl is None:
+            return {}
+        s, e = sl
+        base = schema.layer_path(sample, chrom, "fire_accessibility")
+        return {
+            "starts": self.db[f"{base}/starts"][s:e],
+            "ends": self.db[f"{base}/ends"][s:e],
+            "widths": self.db[f"{base}/widths"][s:e],
+            "scores": self.db[f"{base}/scores"][s:e],
+            "haplotypes": self.db[f"{base}/haplotypes"][s:e],
+        }
+
     def _find_fiber_chromosome(
         self, fiber_id: str, sample: str | None = None
     ) -> str | None:
@@ -467,7 +490,8 @@ class FiberDatabase:
             sample: Sample name.
             chrom: Chromosome name.
             layers: Layers to load. Default: ``["nucleosomes"]``. Pass
-                ``["nucleosomes", "5mC", "5hmC", "6mA", "msp"]`` to load all.
+                ``["nucleosomes", "5mC", "5hmC", "6mA", "msp"]`` to load all
+                core layers. Include ``"fire_accessibility"`` to load FIRE calls.
 
         Returns:
             A dict with these top-level keys:
@@ -534,6 +558,12 @@ class FiberDatabase:
                 ld["starts"] = lg["starts"][:]
                 ld["ends"] = lg["ends"][:]
                 ld["widths"] = lg["widths"][:]
+            elif layer == "fire_accessibility":
+                ld["starts"] = lg["starts"][:]
+                ld["ends"] = lg["ends"][:]
+                ld["widths"] = lg["widths"][:]
+                ld["scores"] = lg["scores"][:]
+                ld["haplotypes"] = lg["haplotypes"][:]
 
             cd[layer] = ld
 
@@ -749,6 +779,8 @@ class FiberDatabase:
         - **5hmC**: ``n_5hmC``, ``pct_hydroxymethylated``
         - **6mA**: ``n_6mA``
         - **msp**: ``n_msp``, ``mean_msp_width``
+        - **fire_accessibility**: ``n_fire_accessibility``, ``min_fire_score``,
+          ``mean_fire_score``, ``fire_overlap_bp``
 
         The "fast" in the name refers to vectorization: each chromosome's data arrays
         are loaded once, then all regions on that chromosome are processed against
@@ -995,6 +1027,28 @@ class FiberDatabase:
             else:
                 rec["n_msp"] = 0
 
+        # ---- FIRE accessibility ----
+        if "fire_accessibility" in feature_types and "fire_accessibility" in layer_data:
+            sl = layer_slices.get("fire_accessibility", {}).get(int(fid_int))
+            if sl:
+                s, e = sl
+                d = layer_data["fire_accessibility"]
+                starts = d["starts"][s:e]
+                ends = d["ends"][s:e]
+                m = (ends >= reg_start) & (starts <= reg_end)
+                rec["n_fire_accessibility"] = int(m.sum())
+                if m.any():
+                    scores = d["scores"][s:e][m]
+                    rec["min_fire_score"] = float(scores.min())
+                    rec["mean_fire_score"] = float(scores.mean())
+                    overlap_start = np.maximum(starts[m], reg_start)
+                    overlap_end = np.minimum(ends[m], reg_end)
+                    rec["fire_overlap_bp"] = int(
+                        np.maximum(overlap_end - overlap_start, 0).sum()
+                    )
+            else:
+                rec["n_fire_accessibility"] = 0
+
     def query_by_id(
         self,
         region_id: str,
@@ -1076,6 +1130,18 @@ class FiberDatabase:
                     rec["n_msp"] = int(m.sum())
                 else:
                     rec["n_msp"] = 0
+
+            if "fire_accessibility" in feature_types:
+                fire = self.get_fire_accessibility(fid, chrom, sample)
+                if fire and len(fire["starts"]) > 0:
+                    m = (fire["ends"] >= start) & (fire["starts"] <= end)
+                    rec["n_fire_accessibility"] = int(m.sum())
+                    if m.any():
+                        scores = fire["scores"][m]
+                        rec["min_fire_score"] = float(scores.min())
+                        rec["mean_fire_score"] = float(scores.mean())
+                else:
+                    rec["n_fire_accessibility"] = 0
 
             results.append(rec)
 

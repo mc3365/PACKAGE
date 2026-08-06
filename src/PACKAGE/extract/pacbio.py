@@ -7,6 +7,7 @@ but the database builder should still receive the same normalized layer files:
 * 5mC: modkit-compatible TSV with probabilities in column 13
 * 6mA: BED12-style single-base blocks
 * MSP: BED12-style interval blocks
+* fire_accessibility: ``ft fire --extract`` BED output for legacy co-accessibility
 
 The important guardrail here is content-aware validation.  PacBio fibertools
 outputs can be BED12, BED9+2, or BED8+2 depending on the track.  Rather than
@@ -639,6 +640,19 @@ def extract_sample(config: Config, sample: SampleConfig) -> None:
             log.info(f"Wrote normalized PacBio MSP BED12: {output}")
         else:
             log.info(f"Skipping existing PacBio MSP BED12: {output}")
+
+    if "fire_accessibility" in sample.layers:
+        output = sample.layers["fire_accessibility"]
+        if settings.overwrite or not output.exists():
+            _run([ft, "fire", "--extract", str(sample.bam), str(output)], command_log)
+            conversion_qc["fire_accessibility"] = {
+                "output": str(output),
+                "format": "ft fire --extract BED",
+                "score_column": 10,
+            }
+            log.info(f"Wrote PacBio FIRE accessibility BED: {output}")
+        else:
+            log.info(f"Skipping existing PacBio FIRE accessibility BED: {output}")
 
     nuc_csv = sample.layers["nucleosomes"]
     nuc_bed = _sidecar_with_suffix(nuc_csv, ".raw_nuc", ".bed")
