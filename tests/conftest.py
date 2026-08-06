@@ -108,7 +108,7 @@ _FIRE_DATA = {
     "starts": np.array([120, 650, 5200], dtype=np.uint32),
     "ends": np.array([180, 760, 5300], dtype=np.uint32),
     "widths": np.array([60, 110, 100], dtype=np.uint32),
-    "scores": np.array([0.05, 1.01, 0.25], dtype=np.float32),
+    "scores": np.array([0.05, 1.01, 0.25], dtype=np.float64),
     "haplotypes": np.array([b"H1", b"H1", b"UNK"], dtype="S10"),
 }
 _FIRE_SLICES = np.array(

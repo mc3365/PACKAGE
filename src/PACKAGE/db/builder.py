@@ -566,7 +566,7 @@ class FiberDatabaseBuilder:
             "fire_starts": fire_sorted.get("starts", np.array([], dtype=np.int32)).astype(np.uint32),
             "fire_ends": fire_sorted.get("ends", np.array([], dtype=np.int32)).astype(np.uint32),
             "fire_widths": fire_sorted.get("widths", np.array([], dtype=np.int32)).astype(np.uint32),
-            "fire_scores": fire_sorted.get("scores", np.array([], dtype=np.float32)).astype(np.float32),
+            "fire_scores": fire_sorted.get("scores", np.array([], dtype=np.float64)).astype(np.float64),
             "fire_haplotypes": fire_sorted.get("haplotypes", np.array([], dtype="S10")).astype("S10"),
         }
 

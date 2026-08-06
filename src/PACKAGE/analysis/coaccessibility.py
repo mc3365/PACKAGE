@@ -111,7 +111,10 @@ def find_contained_peak_pairs(
 
 def _format_score(score: float) -> str:
     """Format FIRE scores close to the legacy text output."""
-    return f"{float(score):.9g}"
+    text = f"{float(score):.9g}"
+    if "." in text and "e" not in text.lower():
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
 
 
 def _write_cov_for_chrom(
