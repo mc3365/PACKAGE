@@ -264,5 +264,58 @@ def coaccess_object(cov_bed: Path, out_json: Path) -> None:
     click.echo(json.dumps(summary, indent=2))
 
 
+@coaccess.command("rank")
+@click.option(
+    "--object",
+    "object_json",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="Enhancer-by-fiber JSON produced by PACKAGE coaccess object.",
+)
+@click.option(
+    "--outdir",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output directory for ce_rank.txt, cluster_rank.txt, and optional plots.",
+)
+@click.option(
+    "--threshold",
+    type=float,
+    default=0.10,
+    show_default=True,
+    help="FIRE score threshold used to call an element accessible on a fiber.",
+)
+@click.option(
+    "--distance-correct/--no-distance-correct",
+    default=True,
+    show_default=True,
+    help="Apply the legacy distance correction before ranking.",
+)
+@click.option(
+    "--plots/--no-plots",
+    default=True,
+    show_default=True,
+    help="Write ranked-score SVG plots when matplotlib is available.",
+)
+def coaccess_rank(
+    object_json: Path,
+    outdir: Path,
+    threshold: float,
+    distance_correct: bool,
+    plots: bool,
+) -> None:
+    """Rank co-accessible FIRE element pairs and stitched regions."""
+    from PACKAGE.analysis.coaccessibility import rank_coaccessibility_object
+
+    summary = rank_coaccessibility_object(
+        object_json,
+        outdir,
+        threshold=threshold,
+        distance_correct=distance_correct,
+        write_plots=plots,
+    )
+    click.echo(json.dumps(summary, indent=2))
+
+
 if __name__ == "__main__":
     cli()

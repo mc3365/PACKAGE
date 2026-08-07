@@ -24,7 +24,7 @@ every `/path/to` value.
 | `samples[].layers.5hmC` | optional | ONT only: modkit `extract full` TSV or TSV.GZ. Usually the same file as `5mC`. |
 | `samples[].layers.6mA` | optional | Fibertools `ft extract --m6a` BED output. PacBio extraction normalizes this to builder-compatible BED12. |
 | `samples[].layers.msp` | optional | Fibertools `ft extract --msp` BED output. PacBio extraction normalizes this to builder-compatible BED12. |
-| `samples[].layers.fire_accessibility` | optional | PacBio `ft fire --extract` BED output for legacy co-accessibility-style accessibility calls. PACKAGE stores column 10 as the FIRE/accessibility score. |
+| `samples[].layers.fire_accessibility` | optional | PacBio `ft fire --extract` BED output for legacy co-accessibility-style accessibility calls. PACKAGE stores column 10 as the FIRE/accessibility score. Use a FIRE-annotated BAM for extraction, or point this layer directly to a precomputed `acc.model.results.sort.bed`. |
 | `annotations` | optional | Named BED annotation files loaded into the HDF5 database during build. Rebuild the database to add annotations if they were omitted. |
 | `parameters.methylation_threshold` | yes | Probability cutoff used to create binary 5mC/5hmC calls during HDF5 build. The validated ONT value is `0.5`. Raw probabilities are also retained. |
 | `parameters.min_msp_size` | yes | Minimum MSP interval size kept during HDF5 build. |
@@ -81,6 +81,14 @@ PacBio outputs:
 - `<sample>_nuc_features.csv`: flattened nucleosome table used by the builder.
 - raw sidecar files such as `<sample>.fibertools_all.tsv.gz` and `<sample>.raw.bed` may be kept for inspection.
 - `PACKAGE_manifest_<sample>.json`: extraction QC, conversion QC, and provenance when enabled.
+
+For PacBio co-accessibility analyses, `PACKAGE extract --platform pacbio` can
+generate `<sample>_acc.model.results.bed` only when `samples[].bam` is a
+FIRE-annotated BAM, such as a `*.fire.bam` produced by the upstream FIRE workflow.
+PACKAGE does not run the full FIRE snakemake/modeling workflow. If reproducing an
+existing analysis, use the exact `acc.model.results.sort.bed` used by that analysis
+and keep the fibertools version in the run log; `ft fire --extract` output may vary
+between fibertools versions.
 
 ## Build
 
@@ -149,6 +157,11 @@ PACKAGE coaccess cov \
 | `--peaks` | yes | BED3 file of constituent/intergenic FIRE peaks. |
 | `--out` | yes | Output nine-column `Cov.bed` path. |
 
+`PACKAGE coaccess cov` uses the HDF5 `fire_accessibility` layer and therefore emits
+rows only for fibers present in the packaged HDF5 molecule table. FIRE calls for
+fibers absent from the packaged nucleosome/fiber table are skipped during build and
+cannot appear in the regenerated `Cov.bed`.
+
 ```bash
 PACKAGE coaccess object \
   --cov /path/to/Cov_PACKAGE.bed \
@@ -159,6 +172,20 @@ PACKAGE coaccess object \
 | --- | --- | --- |
 | `--cov` | yes | Nine-column `Cov.bed` produced by `PACKAGE coaccess cov` or the legacy script. |
 | `--out` | yes | JSON object path using the old enhancer-by-fiber structure. |
+
+```bash
+PACKAGE coaccess rank \
+  --object /path/to/scored_PACKAGE_obj.json \
+  --outdir /path/to/coaccess_rank
+```
+
+| Option | Required | Meaning |
+| --- | --- | --- |
+| `--object` | yes | Enhancer-by-fiber JSON produced by `PACKAGE coaccess object` or the legacy `objPrep.py`. |
+| `--outdir` | yes | Output directory for `ce_rank.txt`, `cluster_rank.txt`, and optional SVG rank plots. |
+| `--threshold` | no | FIRE score cutoff for calling an element accessible on a fiber. Default is the legacy `0.10`. |
+| `--distance-correct / --no-distance-correct` | no | Apply the legacy distance correction before ranking. Enabled by default. |
+| `--plots / --no-plots` | no | Write SVG elbow/rank plots when `matplotlib` is installed. Enabled by default. |
 
 ## Random-Region Benchmark
 

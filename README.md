@@ -86,6 +86,12 @@ For PacBio data, use `PACKAGE extract --platform pacbio` with a PacBio config, o
 normalize existing `ft extract` outputs before building the database. See the
 [tutorial](docs/tutorial.md) for the tested PacBio smoke workflow.
 
+PacBio co-accessibility support starts from a FIRE-annotated BAM or the
+`acc.model.results.bed` generated from it by `ft fire --extract`. The full upstream
+FIRE snakemake/modeling workflow is not bundled; for exact reproduction of legacy
+co-accessibility outputs, use the same extracted FIRE BED and fibertools version
+provenance as the original run.
+
 See the [step-by-step ONT workflow](STEP_BY_STEP_GITHUB.md),
 the [parameter reference](docs/parameters.md), and [`examples/`](examples/)
 for complete usage examples.
@@ -98,8 +104,10 @@ for complete usage examples.
   shared HDF5 schema
 
 The package stores the FIRE/accessibility input layer needed by the legacy
-co-accessibility workflow. The full co-accessibility ranking analysis is still a
-downstream analysis module to add on top of this layer.
+co-accessibility workflow and can regenerate the legacy `Cov.bed`,
+enhancer-by-fiber JSON object, and ranked constituent-element pair tables from that
+layer. More specialized downstream statistical interpretation remains
+workflow-specific.
 
 ## Design philosophy
 

@@ -14,6 +14,7 @@ from PACKAGE.analysis import (
     export_coaccessibility_cov,
     export_global_feature_fractions,
     find_contained_peak_pairs,
+    rank_coaccessibility_object,
 )
 from PACKAGE.analysis.heatmap import smooth_methylation
 
@@ -149,3 +150,46 @@ def test_cov_to_object_matches_legacy_obj_shape(tmp_path):
     assert data[0]["enhs"][0]["fibers"] == [0.05, None]
     assert data[0]["enhs"][1]["enhId"] == "chr1:650-760"
     assert data[0]["enhs"][1]["fibers"] == [1.01, None]
+
+
+def test_rank_coaccessibility_object_writes_legacy_rank_tables(tmp_path):
+    obj = tmp_path / "scored_obj.json"
+    outdir = tmp_path / "data"
+    obj.write_text(
+        json.dumps(
+            [
+                {
+                    "seId": "chr1:100-500",
+                    "enhs": [
+                        {
+                            "enhId": "chr1:100-180",
+                            "fibers": [0.01, 0.02, 0.03, 0.04, 0.05, 1.0, 1.0, 1.0, 1.0, 1.0, 0.01],
+                        },
+                        {
+                            "enhId": "chr1:300-380",
+                            "fibers": [0.01, 0.02, 0.03, 0.04, 1.0, 0.01, 0.02, 1.0, 1.0, 1.0, 0.01],
+                        },
+                    ],
+                }
+            ]
+        )
+    )
+
+    summary = rank_coaccessibility_object(
+        obj,
+        outdir,
+        distance_correct=False,
+        write_plots=False,
+    )
+
+    ce_rows = (outdir / "ce_rank.txt").read_text().splitlines()
+    cluster_rows = (outdir / "cluster_rank.txt").read_text().splitlines()
+    assert summary["n_ranked_pairs"] == 1
+    assert summary["n_ranked_clusters"] == 1
+    assert ce_rows[0].split("\t")[:3] == [
+        "chr1:100-180",
+        "chr1:300-380",
+        "chr1:100-500",
+    ]
+    assert ce_rows[0].split("\t")[3] == "4.0"
+    assert cluster_rows[0].split("\t")[1:4] == ["chr1:100-500", "2", "4.0"]

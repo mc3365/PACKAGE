@@ -56,6 +56,12 @@ layer stores the legacy co-accessibility input from `acc.model.results.bed`: col
 10 is the FIRE/accessibility model score and column 11 is the haplotype when present.
 This is distinct from the raw 0-255 `fire` list in `ft extract --all`.
 
+FIRE modeling itself is upstream of PACKAGE. In the legacy PacBio workflow, the
+input to FIRE was a sorted fibertools BAM, FIRE produced a `*.fire.bam`, and then
+`ft fire --extract` converted that FIRE-annotated BAM into
+`acc.model.results.bed`. PACKAGE starts from the Fiber-seq/FIRE BAM and its
+extracted BED outputs; it does not currently run the full FIRE snakemake workflow.
+
 ### Prepare raw fibertools outputs
 
 If starting from a PacBio Fiber-seq or FIRE BAM, run fibertools extraction. A
@@ -75,6 +81,14 @@ ft fire --extract \
   yaleFiberAug19_2025.fire.bam \
   acc.model.results.bed
 ```
+
+If `samples[].bam` points to a FIRE-annotated BAM and the YAML includes a
+`fire_accessibility` output path, `PACKAGE extract --platform pacbio` can run
+`ft fire --extract` for you. For strict reproduction of an older co-accessibility
+analysis, prefer the exact `acc.model.results.sort.bed` that was used by that
+analysis, because `ft fire --extract` output can vary with fibertools version or
+runtime environment even when the source FIRE BAM is unchanged. Record the `ft
+--version` value in the manifest or run log.
 
 `pacbio_5mc.bed.gz` is useful for inspection, but PACKAGE uses
 `pacbio_all.tsv.gz` for the packaged 5mC layer because that table contains named
@@ -282,6 +296,14 @@ The output has the same nine columns as the legacy file:
 element_chr  element_start  element_end  stitched_chr  stitched_start  stitched_end  fiber_id  fire_score  overlap_bp
 ```
 
+During HDF5 build, PACKAGE attaches `fire_accessibility` calls only to fibers that
+exist in the packaged molecule table for that chromosome. In validation against the
+legacy PacBio co-accessibility run, using the original large
+`acc.model.results.sort.bed` reproduced `Cov.bed` to within three rows out of
+6.7 million; the missing rows were FIRE-only fibers absent from the packaged fiber
+table. This is expected from the HDF5 design, where the core fiber/nucleosome layer
+defines the molecule universe and optional layers attach to those fibers.
+
 To make the legacy enhancer-by-fiber JSON object:
 
 ```bash
@@ -289,6 +311,28 @@ PACKAGE coaccess object \
   --cov /path/to/Cov_PACKAGE.bed \
   --out /path/to/scored_PACKAGE_obj.json
 ```
+
+To rank co-accessible constituent FIRE element pairs and stitched regions:
+
+```bash
+PACKAGE coaccess rank \
+  --object /path/to/scored_PACKAGE_obj.json \
+  --outdir /path/to/coaccess_rank
+```
+
+This writes:
+
+- `ce_rank.txt`: constituent FIRE element pairs sorted by the legacy modified
+  odds-ratio-like co-accessibility score;
+- `cluster_rank.txt`: stitched FIRE regions sorted by their maximum constituent
+  pair score. The legacy script had cluster splitting disabled by default, so this
+  table summarizes each stitched region as one cluster;
+- `ce_pairs_ranked.svg` and `clusters_ranked.svg` when `matplotlib` is available.
+
+The ranking step uses the old FIRE score threshold of `0.10` to decide whether a
+constituent element is accessible on a fiber. It also applies the legacy
+distance-correction pass by default. Use `--no-distance-correct` for a simpler
+smoke test.
 
 ### Current update behavior
 

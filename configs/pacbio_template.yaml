@@ -12,6 +12,10 @@
 #
 # PacBio 5hmC is not currently built. The fire_accessibility layer is distinct
 # from the raw 0-255 fire list in ft extract --all.
+# FIRE modeling itself is upstream of PACKAGE. To generate fire_accessibility
+# during PACKAGE extract, samples[].bam must be a FIRE-annotated *.fire.bam.
+# For exact legacy co-accessibility reproduction, point fire_accessibility to
+# the original acc.model.results.sort.bed used by that analysis.
 output_dir: /path/to/output
 output_file: pacbio_fiber_database.h5
 reference: /path/to/reference/genome.fa
