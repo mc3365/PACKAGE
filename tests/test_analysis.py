@@ -14,6 +14,7 @@ from PACKAGE.analysis import (
     export_coaccessibility_cov,
     export_global_feature_fractions,
     find_contained_peak_pairs,
+    prepare_coaccessibility_regions,
     rank_coaccessibility_object,
 )
 from PACKAGE.analysis.heatmap import smooth_methylation
@@ -93,11 +94,99 @@ def test_smooth_methylation_does_not_zero_pad_edges():
     assert np.allclose(smoothed[[0, -1]], 1.0)
 
 
+def test_prepare_coaccessibility_regions_filters_and_stitches(tmp_path):
+    peaks = tmp_path / "FDR-FIRE-peaks_merge.bed"
+    genes = tmp_path / "genes.gff3"
+    chrom_sizes = tmp_path / "chrom.sizes"
+    outdir = tmp_path / "prepared"
+
+    chrom_sizes.write_text("chr1\t10000\n")
+    genes.write_text(
+        "##gff-version 3\n"
+        "chr1\ttest\tgene\t1001\t2000\t.\t+\t.\tID=plus;gene_type=protein_coding;gene_name=Plus\n"
+        "chr1\ttest\tgene\t4001\t5000\t.\t-\t.\tID=minus;gene_type=protein_coding;gene_name=Minus\n"
+        "chr1\ttest\tgene\t7001\t8000\t.\t+\t.\tID=lnc;gene_type=lncRNA;gene_name=Lnc\n"
+    )
+    peaks.write_text(
+        "chr1\t100\t200\tpeak1\n"
+        "chr1\t600\t700\tplus_promoter\n"
+        "chr1\t2100\t2200\tpeak2\n"
+        "chr1\t3000\t3100\tpeak3\n"
+        "chr1\t5200\t5300\tminus_promoter\n"
+        "chr1\t6000\t6100\tpeak4\n"
+        "chr1\t7500\t7600\tlnc_region\n"
+    )
+
+    summary = prepare_coaccessibility_regions(
+        peaks,
+        genes,
+        chrom_sizes,
+        outdir,
+        promoter_size=500,
+        stitch_distance=2500,
+    )
+
+    assert (outdir / "FIRE_peaks_intergenic.bed").read_text().splitlines() == [
+        "chr1\t100\t200",
+        "chr1\t2100\t2200",
+        "chr1\t3000\t3100",
+        "chr1\t6000\t6100",
+        "chr1\t7500\t7600",
+    ]
+    # The protein-coding gene separates the first two peaks even though their
+    # gap is within the stitching distance. The ignored lncRNA does not.
+    assert (outdir / "FIRE_stitched.bed").read_text().splitlines() == [
+        "chr1\t100\t200",
+        "chr1\t2100\t3100",
+        "chr1\t6000\t7600",
+    ]
+    assert summary["counts"] == {
+        "input_peaks": 7,
+        "blocking_genes": 2,
+        "filtered_peaks": 2,
+        "intergenic_peaks": 5,
+        "stitched_regions": 3,
+    }
+    manifest = json.loads((outdir / "coaccess_prepare_manifest.json").read_text())
+    assert manifest["parameters"]["promoter_size"] == 500
+    assert len(manifest["inputs"]["peaks_bed"]["sha256"]) == 64
+
+
+def test_prepare_coaccessibility_regions_supports_legacy_gff_coordinates(tmp_path):
+    peaks = tmp_path / "peaks.bed"
+    genes = tmp_path / "genes.gff3"
+    chrom_sizes = tmp_path / "chrom.sizes"
+    peaks.write_text("chr1\t1000\t1001\n")
+    genes.write_text("chr1\ttest\tgene\t1001\t2000\t.\t+\t.\tID=g;gene_type=protein_coding\n")
+    chrom_sizes.write_text("chr1\t5000\n")
+
+    standard = prepare_coaccessibility_regions(
+        peaks,
+        genes,
+        chrom_sizes,
+        tmp_path / "standard",
+        promoter_size=0,
+    )
+    legacy = prepare_coaccessibility_regions(
+        peaks,
+        genes,
+        chrom_sizes,
+        tmp_path / "legacy",
+        promoter_size=0,
+        legacy_gff_coordinates=True,
+    )
+
+    assert standard["counts"]["intergenic_peaks"] == 0
+    assert legacy["counts"]["intergenic_peaks"] == 1
+
+
 def test_find_contained_peak_pairs_matches_bedtools_f1_logic(tmp_path):
     stitched = tmp_path / "FIRE_stitched.bed"
     peaks = tmp_path / "FIRE_peaks_intergenic.bed"
     stitched.write_text("chr1\t100\t800\nchr1\t1000\t1400\n")
-    peaks.write_text("chr1\t120\t180\nchr1\t200\t900\nchr1\t300\t350\nchr1\t650\t760\nchr1\t900\t950\n")
+    peaks.write_text(
+        "chr1\t120\t180\nchr1\t200\t900\nchr1\t300\t350\nchr1\t650\t760\nchr1\t900\t950\n"
+    )
 
     pairs = find_contained_peak_pairs(stitched, peaks)
 
@@ -167,7 +256,19 @@ def test_rank_coaccessibility_object_writes_legacy_rank_tables(tmp_path):
                         },
                         {
                             "enhId": "chr1:300-380",
-                            "fibers": [0.01, 0.02, 0.03, 0.04, 1.0, 0.01, 0.02, 1.0, 1.0, 1.0, 0.01],
+                            "fibers": [
+                                0.01,
+                                0.02,
+                                0.03,
+                                0.04,
+                                1.0,
+                                0.01,
+                                0.02,
+                                1.0,
+                                1.0,
+                                1.0,
+                                0.01,
+                            ],
                         },
                     ],
                 }

@@ -140,7 +140,48 @@ PACKAGE query \
 | `--sample` | no | Restrict query to one sample. If omitted, all samples are searched. |
 | `--out` | no | Write overlapping fiber IDs to a text file. If omitted, only the count is printed. |
 
-## PacBio FIRE Co-Accessibility Inputs
+## PacBio FIRE Co-Accessibility
+
+### Prepare intergenic and stitched FIRE regions
+
+```bash
+PACKAGE coaccess prepare \
+  --peaks /path/to/FDR-FIRE-peaks_merge.bed \
+  --genes /path/to/gencode.annotation.gff3 \
+  --chrom-sizes /path/to/mm10.chrom.sizes \
+  --outdir /path/to/coaccess_prepared
+```
+
+| Option | Required | Meaning |
+| --- | --- | --- |
+| `--peaks` | yes | FIRE peak BED file, commonly `FDR-FIRE-peaks_merge.bed`. Extra BED columns are allowed. |
+| `--genes` | yes | Gene annotation in GFF3 or GTF format. |
+| `--chrom-sizes` | yes | Two-column chromosome sizes file for the same reference assembly as the peaks and BAM. |
+| `--outdir` | yes | Directory for prepared BED files and the provenance manifest. |
+| `--promoter-size` | no | Strand-aware promoter extension removed around genes. Default: `500` bp. |
+| `--stitch-distance` | no | Maximum gap joined between neighboring intergenic FIRE peaks. Default: `12500` bp. |
+| `--standard-gff-coordinates` | no | Convert 1-based inclusive GFF coordinates to 0-based BED coordinates. This is the default. |
+| `--legacy-gff-coordinates` | no | Copy GFF coordinates directly, matching the historical script for comparison runs. |
+
+Genes annotated as `lncRNA` or containing `pseudogene` in their gene type are not
+used as filtering or stitching roadblocks, matching the inherited biological rule.
+For plus-strand genes the promoter extension is added upstream; for minus-strand
+genes it is added downstream. Retained peaks are stitched only when the distance
+criterion is met and no retained gene roadblock lies between them.
+
+Outputs:
+
+- `FIRE_peaks_intergenic.bed`: FIRE peaks outside the expanded blocking genes;
+- `FIRE_stitched.bed`: retained peaks joined into co-accessibility regions;
+- `coaccess_prepare_manifest.json`: absolute input/output paths, SHA-256 checksums,
+  parameters, and interval counts.
+
+The historical script interpreted GFF coordinates directly and could omit a final
+chromosome-terminal peak. PACKAGE uses standard GFF-to-BED conversion and retains
+all valid peaks. Use `--legacy-gff-coordinates` to isolate the coordinate convention
+when comparing with historical files; terminal-peak corrections remain intentional.
+
+### Build the coverage table
 
 ```bash
 PACKAGE coaccess cov \
@@ -164,6 +205,8 @@ rows only for fibers present in the packaged HDF5 molecule table. FIRE calls for
 fibers absent from the packaged nucleosome/fiber table are skipped during build and
 cannot appear in the regenerated `Cov.bed`.
 
+### Build the enhancer-by-fiber object
+
 ```bash
 PACKAGE coaccess object \
   --cov /path/to/Cov_PACKAGE.bed \
@@ -174,6 +217,8 @@ PACKAGE coaccess object \
 | --- | --- | --- |
 | `--cov` | yes | Nine-column `Cov.bed` produced by `PACKAGE coaccess cov` or the legacy script. |
 | `--out` | yes | JSON object path using the old enhancer-by-fiber structure. |
+
+### Rank constituent pairs and stitched regions
 
 ```bash
 PACKAGE coaccess rank \

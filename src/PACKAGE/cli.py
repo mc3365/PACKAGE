@@ -191,6 +191,78 @@ def coaccess() -> None:
     """Build PacBio FIRE co-accessibility inputs from a PACKAGE database."""
 
 
+@coaccess.command("prepare")
+@click.option(
+    "--peaks",
+    "peaks_bed",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="FIRE peak BED file, such as FDR-FIRE-peaks_merge.bed.",
+)
+@click.option(
+    "--genes",
+    "genes_gff",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="Gene annotation in GFF3 or GTF format.",
+)
+@click.option(
+    "--chrom-sizes",
+    "chrom_sizes_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="Two-column chromosome sizes file.",
+)
+@click.option(
+    "--outdir",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output directory for intergenic peaks, stitched regions, and manifest.",
+)
+@click.option(
+    "--promoter-size",
+    type=click.IntRange(min=0),
+    default=500,
+    show_default=True,
+    help="Strand-aware promoter extension excluded around genes, in bp.",
+)
+@click.option(
+    "--stitch-distance",
+    type=click.IntRange(min=0),
+    default=12500,
+    show_default=True,
+    help="Maximum gap joined between adjacent intergenic FIRE peaks, in bp.",
+)
+@click.option(
+    "--legacy-gff-coordinates/--standard-gff-coordinates",
+    default=False,
+    show_default=True,
+    help="Use the historical direct GFF-to-BED coordinate interpretation.",
+)
+def coaccess_prepare(
+    peaks_bed: Path,
+    genes_gff: Path,
+    chrom_sizes_path: Path,
+    outdir: Path,
+    promoter_size: int,
+    stitch_distance: int,
+    legacy_gff_coordinates: bool,
+) -> None:
+    """Filter and stitch FIRE peaks into co-accessibility regions."""
+    from PACKAGE.analysis.coaccessibility import prepare_coaccessibility_regions
+
+    summary = prepare_coaccessibility_regions(
+        peaks_bed,
+        genes_gff,
+        chrom_sizes_path,
+        outdir,
+        promoter_size=promoter_size,
+        stitch_distance=stitch_distance,
+        legacy_gff_coordinates=legacy_gff_coordinates,
+    )
+    click.echo(json.dumps(summary, indent=2))
+
+
 @coaccess.command("cov")
 @click.option(
     "--db",

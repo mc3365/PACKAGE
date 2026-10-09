@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from click.testing import CliRunner
 
 from PACKAGE.cli import cli
@@ -74,3 +76,37 @@ build:
     assert called["build_samples"] == ["d0"]
     assert called["db_path"] == tmp_path / "fibers.h5"
     assert called["build_index"] is True
+
+
+def test_coaccess_prepare_command(tmp_path):
+    peaks = tmp_path / "peaks.bed"
+    genes = tmp_path / "genes.gff3"
+    chrom_sizes = tmp_path / "chrom.sizes"
+    outdir = tmp_path / "prepared"
+    peaks.write_text("chr1\t100\t200\nchr1\t250\t300\n")
+    genes.write_text("##gff-version 3\n")
+    chrom_sizes.write_text("chr1\t1000\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "coaccess",
+            "prepare",
+            "--peaks",
+            str(peaks),
+            "--genes",
+            str(genes),
+            "--chrom-sizes",
+            str(chrom_sizes),
+            "--outdir",
+            str(outdir),
+            "--stitch-distance",
+            "100",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    summary = json.loads(result.output)
+    assert summary["counts"]["stitched_regions"] == 1
+    assert (outdir / "FIRE_stitched.bed").read_text() == "chr1\t100\t300\n"

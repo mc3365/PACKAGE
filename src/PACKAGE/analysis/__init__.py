@@ -4,6 +4,7 @@ from PACKAGE.analysis.coaccessibility import (
     cov_to_object,
     export_coaccessibility_cov,
     find_contained_peak_pairs,
+    prepare_coaccessibility_regions,
     rank_coaccessibility_object,
 )
 from PACKAGE.analysis.features import export_global_feature_fractions
@@ -19,5 +20,6 @@ __all__ = [
     "export_coaccessibility_cov",
     "export_global_feature_fractions",
     "find_contained_peak_pairs",
+    "prepare_coaccessibility_regions",
     "rank_coaccessibility_object",
 ]

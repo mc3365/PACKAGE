@@ -18,10 +18,13 @@ The generated ``Cov.bed`` has the same nine columns as the old
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
+import re
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +64,301 @@ class CoaccessPairScore:
     element_b: str
     rank_counts: tuple[int, int, int, int]
     distance_bp: int
+
+
+@dataclass(frozen=True, order=True)
+class GeneInterval:
+    """Gene interval used for intergenic filtering and stitching roadblocks."""
+
+    chrom: str
+    start: int
+    end: int
+    strand: str
+    gene_type: str
+    gene_name: str
+
+
+def _parse_gff_attributes(text: str) -> dict[str, str]:
+    """Parse GFF3 ``key=value`` or GTF ``key "value"`` attributes."""
+    attributes: dict[str, str] = {}
+    for item in text.strip().strip(";").split(";"):
+        item = item.strip()
+        if not item:
+            continue
+        if "=" in item:
+            key, value = item.split("=", 1)
+        else:
+            match = re.match(r"(\S+)\s+[\"']?(.+?)[\"']?$", item)
+            if match is None:
+                continue
+            key, value = match.groups()
+        attributes[key.strip()] = value.strip().strip('"')
+    return attributes
+
+
+def _read_chrom_sizes(path: Path) -> dict[str, int]:
+    sizes: dict[str, int] = {}
+    with Path(path).open() as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip() or line.startswith("#"):
+                continue
+            cols = line.split()
+            if len(cols) < 2:
+                raise ValueError(f"Expected chromosome and size at {path}:{line_number}")
+            try:
+                size = int(cols[1])
+            except ValueError as exc:
+                raise ValueError(f"Invalid chromosome size at {path}:{line_number}") from exc
+            if size <= 0:
+                raise ValueError(f"Chromosome size must be positive at {path}:{line_number}")
+            sizes[cols[0]] = size
+    if not sizes:
+        raise ValueError(f"No chromosome sizes found in {path}")
+    return sizes
+
+
+def _read_blocking_genes(
+    gff_path: Path,
+    chrom_sizes: dict[str, int],
+    *,
+    promoter_size: int,
+    legacy_gff_coordinates: bool,
+) -> tuple[list[GeneInterval], list[BedInterval]]:
+    genes: list[GeneInterval] = []
+    expanded: list[BedInterval] = []
+    with Path(gff_path).open() as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip() or line.startswith("#"):
+                continue
+            cols = line.rstrip("\n").split("\t")
+            if len(cols) != 9 or cols[2] != "gene" or cols[0] not in chrom_sizes:
+                continue
+            attributes = _parse_gff_attributes(cols[8])
+            gene_type = attributes.get("gene_type", attributes.get("gene_biotype", ""))
+            if gene_type == "lncRNA" or "pseudogene" in gene_type.lower():
+                continue
+            try:
+                gff_start = int(cols[3])
+                gff_end = int(cols[4])
+            except ValueError as exc:
+                raise ValueError(f"Invalid GFF coordinates at {gff_path}:{line_number}") from exc
+
+            # GFF3 is 1-based inclusive; BED is 0-based half-open. The legacy
+            # script copied the GFF values directly, which is available as an
+            # explicit compatibility mode for historical comparisons.
+            start = gff_start if legacy_gff_coordinates else gff_start - 1
+            end = gff_end
+            start = max(0, start)
+            end = min(chrom_sizes[cols[0]], end)
+            if end <= start:
+                continue
+            gene = GeneInterval(
+                chrom=cols[0],
+                start=start,
+                end=end,
+                strand=cols[6],
+                gene_type=gene_type,
+                gene_name=attributes.get(
+                    "gene_name", attributes.get("Name", attributes.get("ID", ""))
+                ),
+            )
+            genes.append(gene)
+
+            block_start = gene.start
+            block_end = gene.end
+            if gene.strand == "+":
+                block_start = max(0, block_start - promoter_size)
+            elif gene.strand == "-":
+                block_end = min(chrom_sizes[gene.chrom], block_end + promoter_size)
+            expanded.append(BedInterval(gene.chrom, block_start, block_end))
+    return sorted(genes), sorted(expanded)
+
+
+def _filter_intergenic_peaks(
+    peaks: list[BedInterval],
+    expanded_genes: list[BedInterval],
+    chrom_sizes: dict[str, int],
+) -> tuple[list[BedInterval], int]:
+    genes_by_chrom = _group_by_chrom(expanded_genes)
+    peaks_by_chrom = _group_by_chrom(peaks)
+    retained: list[BedInterval] = []
+    filtered = 0
+
+    for chrom, chrom_peaks in peaks_by_chrom.items():
+        if chrom not in chrom_sizes:
+            filtered += len(chrom_peaks)
+            continue
+        blocks = genes_by_chrom.get(chrom, [])
+        block_i = 0
+        active: list[BedInterval] = []
+        for peak in chrom_peaks:
+            if peak.start < 0 or peak.end > chrom_sizes[chrom] or peak.end <= peak.start:
+                filtered += 1
+                continue
+            while block_i < len(blocks) and blocks[block_i].start < peak.end:
+                active.append(blocks[block_i])
+                block_i += 1
+            active = [block for block in active if block.end > peak.start]
+            if any(block.start < peak.end and block.end > peak.start for block in active):
+                filtered += 1
+            else:
+                retained.append(peak)
+    return sorted(retained), filtered
+
+
+def _stitch_intergenic_peaks(
+    peaks: list[BedInterval],
+    genes: list[GeneInterval],
+    *,
+    stitch_distance: int,
+) -> list[BedInterval]:
+    peaks_by_chrom = _group_by_chrom(peaks)
+    genes_by_chrom: dict[str, list[GeneInterval]] = defaultdict(list)
+    for gene in genes:
+        genes_by_chrom[gene.chrom].append(gene)
+    for chrom in genes_by_chrom:
+        genes_by_chrom[chrom].sort()
+
+    stitched: list[BedInterval] = []
+    for chrom, chrom_peaks in peaks_by_chrom.items():
+        if not chrom_peaks:
+            continue
+        roadblocks = genes_by_chrom.get(chrom, [])
+        road_i = 0
+        group_start = chrom_peaks[0].start
+        group_end = chrom_peaks[0].end
+        previous_end = chrom_peaks[0].end
+
+        for peak in chrom_peaks[1:]:
+            while road_i < len(roadblocks) and roadblocks[road_i].end <= previous_end:
+                road_i += 1
+            crosses_gene = (
+                road_i < len(roadblocks)
+                and roadblocks[road_i].start < peak.start
+                and roadblocks[road_i].end > previous_end
+            )
+            if peak.start - previous_end > stitch_distance or crosses_gene:
+                stitched.append(BedInterval(chrom, group_start, group_end))
+                group_start = peak.start
+                group_end = peak.end
+            else:
+                group_end = max(group_end, peak.end)
+            previous_end = max(previous_end, peak.end)
+        stitched.append(BedInterval(chrom, group_start, group_end))
+    return sorted(stitched)
+
+
+def _write_bed3(path: Path, intervals: list[BedInterval]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as handle:
+        for interval in intervals:
+            handle.write(f"{interval.chrom}\t{interval.start}\t{interval.end}\n")
+
+
+def _file_provenance(path: Path) -> dict[str, Any]:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    stat = Path(path).stat()
+    return {
+        "path": str(Path(path).resolve()),
+        "size_bytes": stat.st_size,
+        "sha256": digest.hexdigest(),
+    }
+
+
+def prepare_coaccessibility_regions(
+    peaks_bed: Path,
+    genes_gff: Path,
+    chrom_sizes_path: Path,
+    outdir: Path,
+    *,
+    promoter_size: int = 500,
+    stitch_distance: int = 12500,
+    legacy_gff_coordinates: bool = False,
+) -> dict[str, Any]:
+    """Filter and stitch FIRE peaks for co-accessibility analysis.
+
+    Protein-coding and other non-lncRNA, non-pseudogene genes are treated as
+    roadblocks. Their promoter-proximal side is expanded in a strand-aware manner
+    before FIRE peaks are filtered. Remaining peaks are stitched when their gap is
+    at most ``stitch_distance`` and no unexpanded gene lies between them.
+
+    Args:
+        peaks_bed: FIRE peak BED file, such as ``FDR-FIRE-peaks_merge.bed``.
+        genes_gff: Gene annotation in GFF3 or GTF format.
+        chrom_sizes_path: Two-column chromosome sizes file.
+        outdir: Directory receiving the two BED files and provenance manifest.
+        promoter_size: Bases added upstream of plus-strand genes and downstream of
+            minus-strand genes during intergenic filtering.
+        stitch_distance: Maximum gap between adjacent peaks in one stitched region.
+        legacy_gff_coordinates: Copy GFF start coordinates directly, matching the
+            historical script, instead of converting GFF3 starts to BED coordinates.
+
+    Returns:
+        JSON-serializable summary with paths, parameters, and interval counts.
+    """
+    if promoter_size < 0:
+        raise ValueError("promoter_size must be >= 0")
+    if stitch_distance < 0:
+        raise ValueError("stitch_distance must be >= 0")
+
+    peaks_bed = Path(peaks_bed)
+    genes_gff = Path(genes_gff)
+    chrom_sizes_path = Path(chrom_sizes_path)
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    chrom_sizes = _read_chrom_sizes(chrom_sizes_path)
+    peaks = _read_bed3(peaks_bed)
+    genes, expanded_genes = _read_blocking_genes(
+        genes_gff,
+        chrom_sizes,
+        promoter_size=promoter_size,
+        legacy_gff_coordinates=legacy_gff_coordinates,
+    )
+    intergenic_peaks, filtered_peaks = _filter_intergenic_peaks(peaks, expanded_genes, chrom_sizes)
+    stitched = _stitch_intergenic_peaks(
+        intergenic_peaks,
+        genes,
+        stitch_distance=stitch_distance,
+    )
+
+    intergenic_path = outdir / "FIRE_peaks_intergenic.bed"
+    stitched_path = outdir / "FIRE_stitched.bed"
+    manifest_path = outdir / "coaccess_prepare_manifest.json"
+    _write_bed3(intergenic_path, intergenic_peaks)
+    _write_bed3(stitched_path, stitched)
+
+    summary: dict[str, Any] = {
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "inputs": {
+            "peaks_bed": _file_provenance(peaks_bed),
+            "genes_gff": _file_provenance(genes_gff),
+            "chrom_sizes": _file_provenance(chrom_sizes_path),
+        },
+        "outputs": {
+            "intergenic_peaks_bed": str(intergenic_path.resolve()),
+            "stitched_bed": str(stitched_path.resolve()),
+            "manifest": str(manifest_path.resolve()),
+        },
+        "parameters": {
+            "promoter_size": promoter_size,
+            "stitch_distance": stitch_distance,
+            "legacy_gff_coordinates": legacy_gff_coordinates,
+            "excluded_gene_types": ["lncRNA", "*pseudogene*"],
+        },
+        "counts": {
+            "input_peaks": len(peaks),
+            "blocking_genes": len(genes),
+            "filtered_peaks": filtered_peaks,
+            "intergenic_peaks": len(intergenic_peaks),
+            "stitched_regions": len(stitched),
+        },
+    }
+    manifest_path.write_text(json.dumps(summary, indent=2) + "\n")
+    return summary
 
 
 def _powlaw(x: np.ndarray | float, a: float, b: float, c: float) -> np.ndarray | float:
@@ -124,7 +422,16 @@ def find_contained_peak_pairs(
             for region in active:
                 if region.start <= peak.start and region.end >= peak.end:
                     pairs.append(CoaccessRegion(element=peak, stitched=region))
-    return sorted(pairs, key=lambda p: (p.element.chrom, p.element.start, p.element.end, p.stitched.start, p.stitched.end))
+    return sorted(
+        pairs,
+        key=lambda p: (
+            p.element.chrom,
+            p.element.start,
+            p.element.end,
+            p.stitched.start,
+            p.stitched.end,
+        ),
+    )
 
 
 def _format_score(score: float) -> str:
@@ -561,10 +868,7 @@ def rank_coaccessibility_object(
     for score in ranked_pairs:
         by_stitched[score.stitched_id].append(score)
 
-    enh_by_stitched = {
-        row["seId"]: [enh["enhId"] for enh in row.get("enhs", [])]
-        for row in matrix
-    }
+    enh_by_stitched = {row["seId"]: [enh["enhId"] for enh in row.get("enhs", [])] for row in matrix}
     cluster_rows: list[tuple[float, str, list[str], tuple[int, int, int, int]]] = []
     for stitched_id, scores in by_stitched.items():
         best = max(scores, key=lambda s: s.score)

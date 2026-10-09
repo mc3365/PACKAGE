@@ -34,7 +34,7 @@ integration layer.
 | **Extraction** | `PACKAGE.extract` | Wraps `modkit` and `fibertools-rs` with validated ONT defaults and PacBio normalization |
 | **Storage** | `PACKAGE.db` | HDF5 schema with spatial indexing and memory-mapped access |
 | **Visualization** | `PACKAGE.viz` | Per-molecule heatmap and related plots |
-| **Co-accessibility** | `PACKAGE.analysis.coaccessibility` | PacBio FIRE coverage, object construction, and pair/region ranking |
+| **Co-accessibility** | `PACKAGE.analysis.coaccessibility` | FIRE peak filtering/stitching, PacBio coverage, object construction, and pair/region ranking |
 | **Benchmark** | `PACKAGE.benchmark` | Query/storage benchmarks and legacy co-accessibility validation |
 
 ## Data Structure
