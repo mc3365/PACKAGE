@@ -166,7 +166,10 @@ def _fingerprint_lines(path: Path) -> dict[str, Any]:
     rows = 0
     with Path(path).open("rb") as handle:
         for line in handle:
-            digest = int.from_bytes(hashlib.blake2b(line.rstrip(b"\n"), digest_size=16).digest())
+            digest = int.from_bytes(
+                hashlib.blake2b(line.rstrip(b"\n"), digest_size=16).digest(),
+                byteorder="big",
+            )
             xor_value ^= digest
             sum_value = (sum_value + digest) % modulus
             rows += 1
