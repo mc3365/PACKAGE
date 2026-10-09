@@ -191,5 +191,8 @@ def test_rank_coaccessibility_object_writes_legacy_rank_tables(tmp_path):
         "chr1:300-380",
         "chr1:100-500",
     ]
-    assert ce_rows[0].split("\t")[3] == "4.0"
-    assert cluster_rows[0].split("\t")[1:4] == ["chr1:100-500", "2", "4.0"]
+    # a=5 concordant accessible, b+c=3 discordant:
+    # a^2 / ((b+c)/2)^2 = 25 / 2.25 = 11.111...
+    assert np.isclose(float(ce_rows[0].split("\t")[3]), 100 / 9)
+    assert cluster_rows[0].split("\t")[1:3] == ["chr1:100-500", "2"]
+    assert np.isclose(float(cluster_rows[0].split("\t")[3]), 100 / 9)

@@ -9,8 +9,9 @@ Implemented submodules:
     ont          ONT storage and query benchmark command-line entry point
     query_speed  Warm-cache query time by region size and query mode
     storage      HDF5, intermediate-file, and record-count summaries
+    coaccessibility  Legacy-versus-PACKAGE PacBio co-accessibility validation
 
-PacBio concordance and full-build resource profiling remain later phases.
+Cross-platform concordance and full-build resource profiling remain later phases.
 """
 
 __all__ = []  # nothing re-exported; users import submodules directly

@@ -187,6 +187,35 @@ PACKAGE coaccess rank \
 | `--distance-correct / --no-distance-correct` | no | Apply the legacy distance correction before ranking. Enabled by default. |
 | `--plots / --no-plots` | no | Write SVG elbow/rank plots when `matplotlib` is installed. Enabled by default. |
 
+## PacBio Co-Accessibility Validation
+
+Compare legacy co-accessibility outputs with PACKAGE while treating the legacy
+directional rows `A -> B` and `B -> A` as one biological pair:
+
+```bash
+python -m PACKAGE.benchmark.coaccessibility \
+  --legacy-ce /path/to/legacy/ce_rank.txt \
+  --package-ce /path/to/package/ce_rank.txt \
+  --legacy-cluster /path/to/legacy/cluster_rank.txt \
+  --package-cluster /path/to/package/cluster_rank.txt \
+  --legacy-cov /path/to/legacy/Cov.sorted.bed \
+  --package-cov /path/to/package/Cov.sorted.bed \
+  --cov-difference /path/to/Cov.missing_from_PACKAGE.bed \
+  --legacy-object /path/to/legacy/scored_obj.json \
+  --package-object /path/to/package/scored_PACKAGE_obj.json \
+  --outdir benchmark/coaccess_validation
+```
+
+The `Cov.bed` comparison uses order-independent streaming fingerprints, so the two
+large files do not need to fit in memory or use identical row order. When
+`--cov-difference` is supplied, the report also tests whether PACKAGE plus the known
+missing rows exactly reconstructs the legacy multiset. Pair statistics canonicalize
+element order before comparing scores, ranks, top-k overlap, and `Super` calls.
+
+Outputs include `validation_summary.json`, pair and cluster agreement CSV files,
+pair/cluster membership tables for investigating method-specific records,
+`top_k_overlap.csv`, and `coaccess_validation.png/.pdf`.
+
 ## Random-Region Benchmark
 
 ```bash

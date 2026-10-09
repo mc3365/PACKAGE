@@ -4,6 +4,11 @@ The ONT benchmark records database scale and measures regional-query performance
 an existing PACKAGE HDF5 database. It does not rebuild the database; full-build timing
 is recorded separately through the Slurm workflow.
 
+PacBio FIRE co-accessibility validation is available separately through
+`python -m PACKAGE.benchmark.coaccessibility`. It compares legacy and PACKAGE
+`Cov.bed`, object, pair-ranking, and stitched-region outputs. See the parameter
+reference for the full command and output descriptions.
+
 ## Run the benchmark
 
 Use a compute node and write each sample to a separate output directory. Build the
