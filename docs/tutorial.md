@@ -381,9 +381,10 @@ the 6.7-million-row legacy Cov file.
 
 ![PacBio FIRE co-accessibility validation](figures/benchmark/coaccess_validation.png)
 
-These results support functional equivalence without claiming that every corrected
-score is numerically identical. See [Benchmark and Validation](benchmark.md#pacbio-fire-co-accessibility-validation)
-for a panel-by-panel explanation and reporting guidance.
+Corrected scores are highly concordant but not numerically identical because the
+distance fitting and legacy sentinel handling differ. See
+[Benchmark and Validation](benchmark.md#pacbio-fire-co-accessibility-validation) for
+a panel-by-panel explanation.
 
 ### Current update behavior
 

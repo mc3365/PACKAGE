@@ -278,10 +278,9 @@ cluster code used numeric `0.5` both for a legitimate pair result and as an inva
 pair sentinel, so valid exact-0.5 cases could be removed. PACKAGE uses an unambiguous
 missing value; all 601 additional regions satisfy the sentinel-collision diagnostic.
 
-For reporting, describe the methods as functionally equivalent at the membership and
-biological-ranking levels, with known implementation corrections. Do not claim exact
-numeric identity for every distance-corrected score. Retain `validation_summary.json`
-and the agreement/membership CSV files with the analysis provenance.
+Pair membership is identical, while corrected scores and `Super` calls are highly
+concordant but not numerically identical because the distance fitting and legacy
+sentinel handling differ.
 
 ## Annotation Query Benchmark
 
