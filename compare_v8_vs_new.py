@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Validate the new PACKAGE.db.database port against the V8 reference implementation.
+"""Validate the new mei_fiber.db.database port against the V8 reference implementation.
 
-Compares outputs of the V8 ``FiberDatabase`` and the new ``PACKAGE.db.FiberDatabase``
+Compares outputs of the V8 ``FiberDatabase`` and the new ``mei_fiber.db.FiberDatabase``
 on the same HDF5 database file, across multiple query types. Both implementations
 should produce identical results (modulo row ordering and float precision).
 
@@ -176,9 +176,9 @@ def main() -> int:
         traceback.print_exc()
         return 1
     try:
-        from PACKAGE.db import FiberDatabase as NewFiberDatabase
+        from mei_fiber.db import FiberDatabase as NewFiberDatabase
     except ImportError:
-        fail("Could not import PACKAGE.db.FiberDatabase — is the new package installed?")
+        fail("Could not import mei_fiber.db.FiberDatabase — is the new package installed?")
         traceback.print_exc()
         return 1
 

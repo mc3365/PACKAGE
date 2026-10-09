@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from PACKAGE.extract.qc import compute_qc_metrics, validate_bam
+from mei_fiber.extract.qc import compute_qc_metrics, validate_bam
 
 
 class _FakePopen:
@@ -43,9 +43,9 @@ def _mock_samtools(monkeypatch, *, sort_order="coordinate", tagged=True):
 
     tags = "\tMM:Z:C+m,0;\tML:B:C,200" if tagged else ""
     line = f"read1\t0\tchr1\t1\t60\t10M\t*\t0\t0\tACGT\tFFFF{tags}\n"
-    monkeypatch.setattr("PACKAGE.extract.qc.subprocess.run", fake_run)
+    monkeypatch.setattr("mei_fiber.extract.qc.subprocess.run", fake_run)
     monkeypatch.setattr(
-        "PACKAGE.extract.qc.subprocess.Popen",
+        "mei_fiber.extract.qc.subprocess.Popen",
         lambda *args, **kwargs: _FakePopen([line]),
     )
 

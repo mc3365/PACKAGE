@@ -10,7 +10,7 @@ showing how this layout is used for annotation-centered queries.
 
 ## Database
 
-::: PACKAGE.db.database
+::: mei_fiber.db.database
     options:
       show_source: false
       members:
@@ -18,44 +18,44 @@ showing how this layout is used for annotation-centered queries.
 
 ## Configuration
 
-::: PACKAGE.config
+::: mei_fiber.config
     options:
       show_source: false
 
 ## Extraction
 
-::: PACKAGE.extract.ont
+::: mei_fiber.extract.ont
     options:
       show_source: false
 
-::: PACKAGE.extract.pacbio
+::: mei_fiber.extract.pacbio
     options:
       show_source: false
 
 ## Co-Accessibility
 
-::: PACKAGE.analysis.coaccessibility
+::: mei_fiber.analysis.coaccessibility
     options:
       show_source: false
 
 ## Benchmarks
 
-::: PACKAGE.benchmark.annotation
+::: mei_fiber.benchmark.annotation
     options:
       show_source: false
 
-::: PACKAGE.benchmark.coaccessibility
+::: mei_fiber.benchmark.coaccessibility
     options:
       show_source: false
 
 ## Visualization
 
-::: PACKAGE.viz.single_molecule
+::: mei_fiber.viz.single_molecule
     options:
       show_source: false
 
 ## Schema
 
-::: PACKAGE.db.schema
+::: mei_fiber.db.schema
     options:
       show_source: true

@@ -12,8 +12,8 @@
 #
 # PacBio 5hmC is not currently built. The fire_accessibility layer is distinct
 # from the raw 0-255 fire list in ft extract --all.
-# FIRE modeling itself is upstream of PACKAGE. To generate fire_accessibility
-# during PACKAGE extract, samples[].bam must be a FIRE-annotated *.fire.bam.
+# FIRE modeling itself is upstream of MEI-Fiber. To generate fire_accessibility
+# during mei-fiber extract, samples[].bam must be a FIRE-annotated *.fire.bam.
 # For exact legacy co-accessibility reproduction, point fire_accessibility to
 # the original acc.model.results.sort.bed used by that analysis.
 output_dir: /path/to/output
@@ -25,9 +25,9 @@ samples:
     bam: /path/to/pacbio_sample1.fire.bam
     layers:
       nucleosomes: /path/to/output/pacbio_sample1_nuc_features.csv
-      "5mC": /path/to/output/pacbio_sample1_5mc_for_PACKAGE.tsv.gz
-      "6mA": /path/to/output/pacbio_sample1_6ma_for_PACKAGE.bed
-      msp: /path/to/output/pacbio_sample1_msp_for_PACKAGE.bed
+      "5mC": /path/to/output/pacbio_sample1_5mc_for_MEI_Fiber.tsv.gz
+      "6mA": /path/to/output/pacbio_sample1_6ma_for_MEI_Fiber.bed
+      msp: /path/to/output/pacbio_sample1_msp_for_MEI_Fiber.bed
       fire_accessibility: /path/to/output/pacbio_sample1_acc.model.results.bed
 
 # Optional. Add the same master annotation BED used for ONT if you want

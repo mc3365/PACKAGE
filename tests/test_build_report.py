@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from PACKAGE.benchmark.build_report import parse_gnu_time, write_build_report
+from mei_fiber.benchmark.build_report import parse_gnu_time, write_build_report
 
 
 def test_parse_gnu_time(tmp_path):

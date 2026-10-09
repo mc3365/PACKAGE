@@ -1,7 +1,7 @@
 # Step-by-step ONT workflow
 
 This guide starts with an aligned Oxford Nanopore BAM and ends with a queryable
-PACKAGE database and a single-molecule regional plot. It follows the workflow tested
+MEI-Fiber database and a single-molecule regional plot. It follows the workflow tested
 with the d0 and d4 mouse embryonic stem-cell data.
 
 This guide intentionally focuses on the ONT workflow. The complete PacBio extraction,
@@ -13,11 +13,11 @@ For a complete list of command-line and YAML options, see
 
 ## 1. Clone the repository
 
-Choose a directory where you keep code projects, then clone PACKAGE:
+Choose a directory where you keep code projects, then clone MEI-Fiber:
 
 ```bash
-git clone https://github.com/mc3365/PACKAGE.git
-cd PACKAGE
+git clone https://github.com/mc3365/MEI-Fiber.git
+cd MEI-Fiber
 ```
 
 To update an existing clone:
@@ -27,7 +27,7 @@ git checkout main
 git pull --ff-only
 ```
 
-## 2. Install PACKAGE and the ONT tools
+## 2. Install MEI-Fiber and the ONT tools
 
 The supplied Conda environment includes the versions used during validation:
 
@@ -35,18 +35,18 @@ The supplied Conda environment includes the versions used during validation:
 - modkit 0.5.0
 - fibertools-rs 0.8.0
 
-Create the environment and install PACKAGE:
+Create the environment and install MEI-Fiber:
 
 ```bash
 conda env create -f environments/ont.yml
-conda activate package-ont
+conda activate mei-fiber-ont
 pip install -e ".[viz]"
 ```
 
 Confirm that the command-line tools are available:
 
 ```bash
-PACKAGE --version
+mei-fiber --version
 samtools --version | head -1
 modkit --version
 ft --version
@@ -65,7 +65,7 @@ The input BAM must:
 - use chromosome names compatible with the reference FASTA; and
 - contain paired MM and ML modification tags.
 
-PACKAGE checks these requirements before extraction. Basic checks can also be run
+MEI-Fiber checks these requirements before extraction. Basic checks can also be run
 directly:
 
 ```bash
@@ -132,7 +132,7 @@ Create a second YAML file that points to `sample_test.bam` and writes to a separ
 test directory. Then run:
 
 ```bash
-PACKAGE extract \
+mei-fiber extract \
   --platform ont \
   --config configs/ont_smoke_test.yaml \
   --samples sample_test
@@ -152,13 +152,13 @@ Successful extraction produces:
 - BED output for 6mA;
 - BED output for MSPs;
 - a flattened nucleosome CSV; and
-- `PACKAGE_manifest_<sample>.json` with BAM QC, tool versions, commands, and output
+- `MEI-Fiber_manifest_<sample>.json` with BAM QC, tool versions, commands, and output
   sizes.
 
 Inspect the manifest before continuing:
 
 ```bash
-python -m json.tool /path/to/PACKAGE_manifest_sample_test.json | less
+python -m json.tool /path/to/MEI-Fiber_manifest_sample_test.json | less
 ```
 
 ## 6. Extract the full samples
@@ -167,13 +167,13 @@ Run full extraction on a compute node or submit it as a Slurm job. To process ev
 sample in the YAML:
 
 ```bash
-PACKAGE extract --platform ont --config configs/my_ont.yaml
+mei-fiber extract --platform ont --config configs/my_ont.yaml
 ```
 
 To process selected samples, repeat `--samples`:
 
 ```bash
-PACKAGE extract \
+mei-fiber extract \
   --platform ont \
   --config configs/my_ont.yaml \
   --samples d0 \
@@ -194,7 +194,7 @@ python -m pytest tests/test_utils.py tests/test_builder.py -q
 Build every configured sample:
 
 ```bash
-PACKAGE build --config configs/my_ont.yaml
+mei-fiber build --config configs/my_ont.yaml
 ```
 
 Build command options:
@@ -215,7 +215,7 @@ previous HDF5 file before rebuilding.
 Inspect the completed database:
 
 ```bash
-PACKAGE info /path/to/output/fiber_database.h5
+mei-fiber info /path/to/output/fiber_database.h5
 ls -lh /path/to/output/fiber_database.h5
 ls -lh /path/to/output/fiber_database.index.pkl
 ```
@@ -228,7 +228,7 @@ consistent with the extraction inputs.
 Use the command line for a quick overlap check:
 
 ```bash
-PACKAGE query \
+mei-fiber query \
   --db /path/to/output/fiber_database.h5 \
   --region chr1:3000000-5000000 \
   --sample d0
@@ -246,7 +246,7 @@ Query command options:
 For repeated regional analysis, create the spatial index once:
 
 ```python
-from PACKAGE.db import FiberDatabase
+from mei_fiber.db import FiberDatabase
 
 with FiberDatabase("/path/to/output/fiber_database.h5", build_index=True) as db:
     print(db.get_summary())
@@ -351,7 +351,7 @@ For more detail on plotting outputs and defaults, see
 Use the annotation benchmark for a biologically meaningful speed test:
 
 ```bash
-python -m PACKAGE.benchmark.annotation \
+python -m mei_fiber.benchmark.annotation \
   --db /path/to/output/fiber_database.h5 \
   --sample d0 \
   --annotation CGI \
@@ -365,7 +365,7 @@ python -m PACKAGE.benchmark.annotation \
 Use the random-region benchmark for technical scaling across window sizes:
 
 ```bash
-python -m PACKAGE.benchmark.ont \
+python -m mei_fiber.benchmark.ont \
   --db /path/to/output/fiber_database.h5 \
   --config configs/my_ont.yaml \
   --sample d0 \
@@ -411,7 +411,7 @@ executable paths explicitly in the YAML configuration.
 
 ### `gzip.BadGzipFile`
 
-Some older extraction outputs have a `.gz` suffix but contain plain text. PACKAGE can
+Some older extraction outputs have a `.gz` suffix but contain plain text. MEI-Fiber can
 read both forms, but new modkit outputs should be checked with:
 
 ```bash
@@ -435,7 +435,7 @@ git push
 
 ## Development history
 
-PACKAGE began as a Python package skeleton and was filled in against the most recent
+MEI-Fiber began as a Python package skeleton and was filled in against the most recent
 legacy V8 scripts. The database reader was first checked for output parity, followed by
 the builder and then the ONT extraction workflow. Real d0 and d4 data were used to
 validate the HDF5 build, regional queries, modification binarization, BAM QC, manifests,

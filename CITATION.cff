@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: PACKAGE
+title: 'MEI-Fiber: Multimodal Epigenetic Integration with Fiber-seq'
 message: >-
   If you use this software, please cite it using the metadata from this file.
 type: software
@@ -8,12 +8,12 @@ authors:
     family-names: Cui
     email: meiying.cui@yale.edu
     affiliation: Yale University
-repository-code: 'https://github.com/mc3365/PACKAGE'
+repository-code: 'https://github.com/mc3365/MEI-Fiber'
 abstract: >-
-  PACKAGE is a modular Python framework for single-molecule epigenomic analysis
-  of Oxford Nanopore long-read data. It provides validated extraction orchestration,
-  HDF5-backed storage, regional queries, and visualization at single-molecule
-  resolution.
+  MEI-Fiber is a modular Python framework for multimodal single-molecule epigenomic
+  analysis of Oxford Nanopore and PacBio Fiber-seq data. It provides extraction
+  orchestration, HDF5-backed storage, indexed queries, visualization, and PacBio
+  FIRE co-accessibility analysis.
 keywords:
   - fiber-seq
   - long-read sequencing
@@ -22,5 +22,5 @@ keywords:
   - nucleosome positioning
   - dna methylation
 license: MIT
-version: 0.4.0
-date-released: '2026-06-21'
+version: 0.5.0
+date-released: '2026-10-09'

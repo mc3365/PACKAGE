@@ -6,15 +6,15 @@ import json
 
 from click.testing import CliRunner
 
-from PACKAGE.cli import cli
+from mei_fiber.cli import cli
 
 
 def test_cli_help():
-    """Top-level --help should succeed and mention 'PACKAGE'."""
+    """Top-level --help should succeed and mention MEI-Fiber."""
     runner = CliRunner()
     result = runner.invoke(cli, ["--help"])
     assert result.exit_code == 0
-    assert "package" in result.output.lower()
+    assert "mei-fiber" in result.output.lower()
 
 
 def test_cli_version():
@@ -22,12 +22,12 @@ def test_cli_version():
     runner = CliRunner()
     result = runner.invoke(cli, ["--version"])
     assert result.exit_code == 0
-    # Format is "PACKAGE, version X.Y.Z"
+    # Format is "mei_fiber, version X.Y.Z"
     assert "version" in result.output.lower()
 
 
 def test_info_command(tiny_db_path):
-    """`PACKAGE info <path>` should run and report samples."""
+    """`mei_fiber info <path>` should run and report samples."""
     runner = CliRunner()
     result = runner.invoke(cli, ["info", str(tiny_db_path)])
     assert result.exit_code == 0
@@ -35,7 +35,7 @@ def test_info_command(tiny_db_path):
 
 
 def test_build_command_can_build_spatial_index_from_config(tmp_path, monkeypatch):
-    """`PACKAGE build` should honor build.build_spatial_index from the YAML."""
+    """`mei_fiber build` should honor build.build_spatial_index from the YAML."""
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(
         f"""
@@ -66,8 +66,8 @@ build:
         def __exit__(self, *exc):
             return None
 
-    monkeypatch.setattr("PACKAGE.db.builder.build_database", fake_build_database)
-    monkeypatch.setattr("PACKAGE.db.database.FiberDatabase", FakeFiberDatabase)
+    monkeypatch.setattr("mei_fiber.db.builder.build_database", fake_build_database)
+    monkeypatch.setattr("mei_fiber.db.database.FiberDatabase", FakeFiberDatabase)
 
     runner = CliRunner()
     result = runner.invoke(cli, ["build", "--config", str(cfg_path)])

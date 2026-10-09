@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from PACKAGE.db import FiberDatabase
+from mei_fiber.db import FiberDatabase
 
 
 # ---------------------------------------------------------------------------

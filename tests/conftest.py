@@ -21,7 +21,7 @@ import pytest
 
 @pytest.fixture
 def tiny_db_path(tmp_path: Path) -> Path:
-    """Minimal PACKAGE-shaped HDF5 in a per-test tmpdir.
+    """Minimal mei_fiber-shaped HDF5 in a per-test tmpdir.
 
     Contains top-level metadata and one (sample, chromosome) with fiber_metadata
     for 2 fibers. No modification layers. Used by Batch 1 tests.
@@ -119,7 +119,7 @@ _FIRE_SLICES = np.array(
 
 @pytest.fixture
 def tiny_db_path_with_layers(tmp_path: Path) -> Path:
-    """PACKAGE-shaped HDF5 with all the structure Batch 2 methods need.
+    """mei_fiber-shaped HDF5 with all the structure Batch 2 methods need.
 
     Two fibers on chr1:
       - fiber1 (int_id=0): spans [100, 2100), has 3 nucleosomes, 4 5mC calls, 2 MSPs

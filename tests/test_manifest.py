@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from PACKAGE.extract.manifest import (
+from mei_fiber.extract.manifest import (
     capture_tool_versions,
     sha256_file,
     write_manifest,
@@ -22,12 +22,12 @@ def test_write_manifest_adds_provenance_fields(tmp_path):
     path = write_manifest(
         tmp_path,
         {"sample": "d0", "input": Path("/data/d0.bam")},
-        filename="PACKAGE_manifest_d0.json",
+        filename="MEI-Fiber_manifest_d0.json",
     )
     data = json.loads(path.read_text())
     assert data["sample"] == "d0"
     assert data["input"] == "/data/d0.bam"
-    assert data["package_version"]
+    assert data["mei_fiber_version"]
     assert data["created_at"]
     assert data["host"]
 
@@ -37,6 +37,6 @@ def test_capture_tool_versions_uses_first_nonempty_line(monkeypatch):
         assert command[1] == "--version"
         return SimpleNamespace(stdout="\nmodkit 0.5.0\nextra", stderr="", returncode=0)
 
-    monkeypatch.setattr("PACKAGE.extract.manifest.subprocess.run", fake_run)
+    monkeypatch.setattr("mei_fiber.extract.manifest.subprocess.run", fake_run)
     versions = capture_tool_versions({"modkit": "/tools/modkit"})
     assert versions == {"modkit": "modkit 0.5.0"}

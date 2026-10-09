@@ -10,10 +10,10 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 
-from PACKAGE.analysis import export_annotation_matrices, export_global_feature_fractions
-from PACKAGE.analysis.heatmap import export_centered_annotation_matrices
-from PACKAGE.db import FiberDatabase
-from PACKAGE.viz import (
+from mei_fiber.analysis import export_annotation_matrices, export_global_feature_fractions
+from mei_fiber.analysis.heatmap import export_centered_annotation_matrices
+from mei_fiber.db import FiberDatabase
+from mei_fiber.viz import (
     plot_annotation_heatmap,
     plot_annotation_metaplot,
     plot_centered_annotation_heatmap,
@@ -21,7 +21,7 @@ from PACKAGE.viz import (
     plot_feature_ecdfs,
     single_molecule_heatmap,
 )
-from PACKAGE.viz.ecdf import _ecdf_xy
+from mei_fiber.viz.ecdf import _ecdf_xy
 
 
 def test_single_molecule_heatmap_renders_layers(tiny_db_path_with_layers, tmp_path):

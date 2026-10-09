@@ -1,10 +1,10 @@
 # Benchmarking and Validation
 
 The ONT benchmark records database scale and measures regional-query performance on
-an existing PACKAGE HDF5 database. It does not rebuild the database; full-build timing
+an existing MEI-Fiber HDF5 database. It does not rebuild the database; full-build timing
 is recorded separately through the Slurm workflow.
 
-PacBio FIRE validation compares legacy and PACKAGE `Cov.bed`, object, pair-ranking,
+PacBio FIRE validation compares legacy and MEI-Fiber `Cov.bed`, object, pair-ranking,
 and stitched-region outputs. These are complementary questions: the ONT benchmarks
 measure storage and query performance, while the PacBio validation measures workflow
 equivalence and explains intentional differences from the legacy implementation.
@@ -15,7 +15,7 @@ Use a compute node and write each sample to a separate output directory. Build t
 spatial index during the first run if the database does not already have one:
 
 ```bash
-python -m PACKAGE.benchmark.ont \
+python -m mei_fiber.benchmark.ont \
   --db /path/to/fiber_database.h5 \
   --config configs/my_ont.yaml \
   --sample d0 \
@@ -31,7 +31,7 @@ python -m PACKAGE.benchmark.ont \
 For another sample, reuse the saved index and change the output directory:
 
 ```bash
-python -m PACKAGE.benchmark.ont \
+python -m mei_fiber.benchmark.ont \
   --db /path/to/fiber_database.h5 \
   --config configs/my_ont.yaml \
   --sample d4 \
@@ -94,7 +94,7 @@ python examples/ont_benchmark_summary.py \
 ```
 
 The BAM paths are optional. When supplied, the storage panel shows the aligned BAM
-footprint alongside extracted intermediates, the PACKAGE HDF5 file, and the spatial
+footprint alongside extracted intermediates, the MEI-Fiber HDF5 file, and the spatial
 index. The `intermediate_size_bytes` value in `storage_summary.json` is the sum of
 the extracted layer files listed in the YAML; it does not include the original BAM.
 
@@ -108,7 +108,7 @@ The summary script writes:
 - `query_speed_summary_without_outliers.csv`: random-window query summary excluding
   regions with very large returned-fiber counts;
 - `benchmark_annotation_queries.*`: annotation query timing;
-- `package_ont_workflow.*`: current ONT workflow schematic; and
+- `mei_fiber_ont_workflow.*`: current ONT workflow schematic; and
 - `benchmark_summary.md`: key numeric ratios.
 
 ## How to Read the Plots
@@ -126,7 +126,7 @@ and nucleosome CSV files. They are not the original aligned BAM files. When
 `--bam` paths are supplied to `examples/ont_benchmark_summary.py`, the BAM sizes
 are shown separately.
 
-The HDF5 bar shows the integrated PACKAGE database size, and the spatial-index
+The HDF5 bar shows the integrated MEI-Fiber database size, and the spatial-index
 bar shows the sidecar index used for fast coordinate lookup. A large difference
 between intermediate files and HDF5 means the package has consolidated many
 large per-layer files into a smaller queryable database.
@@ -181,7 +181,7 @@ The benchmark times:
 FiberDatabase.query_annotation_fast(...)
 ```
 
-For each `(annotation region, overlapping fiber)` row, PACKAGE summarizes the
+For each `(annotation region, overlapping fiber)` row, MEI-Fiber summarizes the
 requested molecular features, such as nucleosome count and spacing, CpG count
 and percent methylated, 5hmC count, and MSP count/width. This is not just a
 coordinate lookup and it does not return every raw base-level array; it measures
@@ -195,34 +195,34 @@ individual fibers overlap those promoters.
 
 ![ONT annotation query benchmark](figures/benchmark/benchmark_annotation_queries.png)
 
-### `package_ont_workflow`
+### `mei_fiber_ont_workflow`
 
-This schematic summarizes the ONT branch of PACKAGE: aligned Fiber-seq
+This schematic summarizes the ONT branch of MEI-Fiber: aligned Fiber-seq
 BAM files are processed by `modkit` and `fibertools-rs`, the extracted layers are
 packed into an indexed HDF5 database, and downstream users query or visualize
 single-molecule molecular features. It is retained as an ONT-specific schematic;
 the PacBio/FIRE path is documented separately below.
 
-![PACKAGE ONT workflow](figures/benchmark/package_ont_workflow.png)
+![MEI-Fiber ONT workflow](figures/benchmark/mei_fiber_ont_workflow.png)
 
 ## PacBio FIRE Co-Accessibility Validation
 
-Run this comparison after generating PACKAGE `Cov.bed`, object, pair-rank, and
+Run this comparison after generating MEI-Fiber `Cov.bed`, object, pair-rank, and
 cluster-rank outputs. The legacy pair table contains both `A -> B` and `B -> A`, so
 the validator first canonicalizes element order and compares one row per biological
 pair.
 
 ```bash
-python -m PACKAGE.benchmark.coaccessibility \
+python -m mei_fiber.benchmark.coaccessibility \
   --legacy-ce /path/to/legacy/ce_rank.txt \
-  --package-ce /path/to/package/ce_rank.txt \
+  --mei-fiber-ce /path/to/package/ce_rank.txt \
   --legacy-cluster /path/to/legacy/cluster_rank.txt \
-  --package-cluster /path/to/package/cluster_rank.txt \
+  --mei-fiber-cluster /path/to/package/cluster_rank.txt \
   --legacy-cov /path/to/legacy/Cov.sorted.bed \
-  --package-cov /path/to/package/Cov.sorted.bed \
-  --cov-difference /path/to/Cov.missing_from_PACKAGE.bed \
+  --mei-fiber-cov /path/to/package/Cov.sorted.bed \
+  --cov-difference /path/to/Cov.missing_from_MEI_Fiber.bed \
   --legacy-object /path/to/legacy/scored_obj.json \
-  --package-object /path/to/package/scored_PACKAGE_obj.json \
+  --mei-fiber-object /path/to/package/scored_MEI_Fiber_obj.json \
   --outdir benchmark/coaccess_validation
 ```
 
@@ -247,15 +247,15 @@ The current reference dataset produced the following comparison:
 
 | Metric | Result | Interpretation |
 | --- | ---: | --- |
-| Unique constituent pairs | 74,435 legacy; 74,435 PACKAGE; all shared | Exact biological pair membership |
+| Unique constituent pairs | 74,435 legacy; 74,435 MEI-Fiber; all shared | Exact biological pair membership |
 | Pair score Pearson | 0.990 | Corrected score magnitudes are highly concordant |
 | Pair/rank Spearman | 0.997 | Pair ordering is nearly identical |
 | Pair `Super` agreement | 99.93% | 52 boundary differences among 74,435 pairs |
 | Legacy stitched regions recovered | 15,287/15,287 | No legacy region was lost |
-| Additional PACKAGE regions | 601 | All match the legacy `0.5` sentinel-collision diagnostic |
+| Additional MEI-Fiber regions | 601 | All match the legacy `0.5` sentinel-collision diagnostic |
 | Cluster score Pearson | 0.990 | Shared stitched-region scores are highly concordant |
 | Cluster/rank Spearman | 0.986 | Shared region ordering is strongly concordant |
-| Cov rows | 6,739,056 legacy; 6,739,053 PACKAGE | Three FIRE-only fibers were absent from the HDF5 molecule table |
+| Cov rows | 6,739,056 legacy; 6,739,053 MEI-Fiber | Three FIRE-only fibers were absent from the HDF5 molecule table |
 | Cov reconstruction | Exact after adding 3 known rows | No unexplained Cov difference remained |
 
 ![PacBio FIRE co-accessibility validation](figures/benchmark/coaccess_validation.png)
@@ -265,17 +265,17 @@ Read the four panels as follows:
 1. **Constituent-pair scores:** points close to the identity line indicate similar
    distance-corrected scores over several orders of magnitude.
 2. **Constituent-pair ranks:** small rank shifts arise because the legacy distance fit
-   uses directional duplicates while PACKAGE fits unique unordered pairs.
+   uses directional duplicates while MEI-Fiber fits unique unordered pairs.
 3. **Top-k pair overlap:** 90% of the top 10 and 95-98% of larger top-k sets are
    shared, showing that the strongest biological results are stable.
 4. **Shared stitched regions:** most shared region scores lie near identity. The
    low-score horizontal feature is emphasized by the logarithmic axes and reflects
-   small low-end scoring differences. PACKAGE-only regions are not drawn in this
+   small low-end scoring differences. MEI-Fiber-only regions are not drawn in this
    shared-only panel.
 
-The 601 additional PACKAGE regions are not unexplained false positives. The legacy
+The 601 additional MEI-Fiber regions are not unexplained false positives. The legacy
 cluster code used numeric `0.5` both for a legitimate pair result and as an invalid
-pair sentinel, so valid exact-0.5 cases could be removed. PACKAGE uses an unambiguous
+pair sentinel, so valid exact-0.5 cases could be removed. MEI-Fiber uses an unambiguous
 missing value; all 601 additional regions satisfy the sentinel-collision diagnostic.
 
 Pair membership is identical, while corrected scores and `Super` calls are highly
@@ -290,7 +290,7 @@ promoter, enhancer, or super-enhancer queries. This times
 per-fiber layer summaries.
 
 ```bash
-python -m PACKAGE.benchmark.annotation \
+python -m mei_fiber.benchmark.annotation \
   --db /path/to/fiber_database.h5 \
   --sample d0 \
   --annotation CGI \
@@ -317,7 +317,7 @@ technical scaling across interval sizes.
 stored annotation table; it is a cap for reproducible smoke benchmarks, not a random
 sample. The reported row count is not the number of annotation regions. It is the
 number of `(annotation region, overlapping fiber)` rows returned after finding fibers
-that overlap those 50 regions. For each row, PACKAGE computes requested layer
+that overlap those 50 regions. For each row, MEI-Fiber computes requested layer
 summaries such as nucleosome counts, CpG counts, percent methylated, 5hmC counts, and
 MSP counts/widths. It does not return all raw base-level arrays in this benchmark.
 
@@ -330,7 +330,7 @@ Full-build timing requires a new output HDF5 file. Copy the working YAML, change
 sbatch --export=ALL,\
 CONFIG=/absolute/path/configs/benchmark_ont.yaml,\
 PYTHON=/absolute/path/env/bin/python,\
-PACKAGE_ROOT=/absolute/path/PACKAGE \
+MEI_FIBER_ROOT=/absolute/path/MEI-Fiber \
 slurm/benchmark_full_build.sh
 ```
 

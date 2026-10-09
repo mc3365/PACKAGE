@@ -6,8 +6,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from PACKAGE.analysis import export_annotation_matrices
-from PACKAGE.viz import plot_annotation_heatmap, plot_annotation_metaplot
+from mei_fiber.analysis import export_annotation_matrices
+from mei_fiber.viz import plot_annotation_heatmap, plot_annotation_metaplot
 
 
 def main() -> None:

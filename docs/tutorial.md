@@ -1,6 +1,6 @@
 # Tutorial
 
-PACKAGE uses the same HDF5 schema for ONT and PacBio after platform-specific
+MEI-Fiber uses the same HDF5 schema for ONT and PacBio after platform-specific
 extraction outputs have been converted into common intermediate files.
 
 Choose the path that matches your input and analysis goal:
@@ -10,10 +10,10 @@ Choose the path that matches your input and analysis goal:
 | ONT BAM with MM/ML tags | [ONT workflow](#ont-workflow) |
 | PacBio Fiber-seq BAM | [PacBio workflow](#pacbio-workflow) through HDF5 build/query |
 | PacBio FIRE-annotated BAM | PacBio workflow plus [FIRE co-accessibility](#fire-co-accessibility-preparation) |
-| Existing legacy and PACKAGE FIRE outputs | [Co-accessibility validation](#validate-against-a-legacy-run) |
+| Existing legacy and MEI-Fiber FIRE outputs | [Co-accessibility validation](#validate-against-a-legacy-run) |
 
 For a first run, use a small coordinate-sliced BAM and a separate output directory.
-After extraction, inspect the manifest; after build, run `PACKAGE info` and one region
+After extraction, inspect the manifest; after build, run `mei-fiber info` and one region
 query before submitting genome-scale analyses.
 
 ## ONT Workflow
@@ -26,7 +26,7 @@ The configured methylation threshold is `0.5`; binarization happens during the H
 build while raw probabilities are retained.
 
 The BAM must be coordinate sorted, indexed, aligned to the configured reference, and
-contain MM/ML tags. PACKAGE checks these requirements before extraction.
+contain MM/ML tags. MEI-Fiber checks these requirements before extraction.
 
 For all YAML fields and command-line options, see the
 [Parameter Reference](parameters.md).
@@ -34,13 +34,13 @@ For all YAML fields and command-line options, see the
 ### Extract and build
 
 ```bash
-PACKAGE extract --platform ont --config configs/my_ont.yaml
-PACKAGE build --config configs/my_ont.yaml
-PACKAGE info /path/to/output/fiber_database.h5
+mei-fiber extract --platform ont --config configs/my_ont.yaml
+mei-fiber build --config configs/my_ont.yaml
+mei-fiber info /path/to/output/fiber_database.h5
 ```
 
 Existing extraction outputs are reused when `overwrite: false`. Each extraction writes
-`PACKAGE_manifest_<sample>.json` with input QC, tool versions, commands, and outputs.
+`MEI-Fiber_manifest_<sample>.json` with input QC, tool versions, commands, and outputs.
 With `build.build_spatial_index: true`, the build also writes
 `fiber_database.index.pkl` beside the HDF5 file. Keep the sidecar with the database;
 it is used for fast coordinate queries.
@@ -48,7 +48,7 @@ it is used for fast coordinate queries.
 ### Query a region
 
 ```bash
-PACKAGE query \
+mei-fiber query \
   --db /path/to/output/fiber_database.h5 \
   --region chr1:3000000-5000000 \
   --sample sample1
@@ -69,10 +69,10 @@ layer stores the legacy co-accessibility input from `acc.model.results.bed`: col
 10 is the FIRE/accessibility model score and column 11 is the haplotype when present.
 This is distinct from the raw 0-255 `fire` list in `ft extract --all`.
 
-FIRE modeling itself is upstream of PACKAGE. In the legacy PacBio workflow, the
+FIRE modeling itself is upstream of MEI-Fiber. In the legacy PacBio workflow, the
 input to FIRE was a sorted fibertools BAM, FIRE produced a `*.fire.bam`, and then
 `ft fire --extract` converted that FIRE-annotated BAM into
-`acc.model.results.bed`. PACKAGE starts from the Fiber-seq/FIRE BAM and its
+`acc.model.results.bed`. MEI-Fiber starts from the Fiber-seq/FIRE BAM and its
 extracted BED outputs; it does not currently run the full FIRE snakemake workflow.
 
 ### Prepare raw fibertools outputs
@@ -96,19 +96,19 @@ ft fire --extract \
 ```
 
 If `samples[].bam` points to a FIRE-annotated BAM and the YAML includes a
-`fire_accessibility` output path, `PACKAGE extract --platform pacbio` can run
+`fire_accessibility` output path, `mei-fiber extract --platform pacbio` can run
 `ft fire --extract` for you. For strict reproduction of an older co-accessibility
 analysis, prefer the exact `acc.model.results.sort.bed` that was used by that
 analysis, because `ft fire --extract` output can vary with fibertools version or
 runtime environment even when the source FIRE BAM is unchanged. Record the `ft
 --version` value in the manifest or run log.
 
-`pacbio_5mc.bed.gz` is useful for inspection, but PACKAGE uses
+`pacbio_5mc.bed.gz` is useful for inspection, but MEI-Fiber uses
 `pacbio_all.tsv.gz` for the packaged 5mC layer because that table contains named
 `ref_5mC` and `5mC_qual` fields. The PacBio normalizer skips missing reference
 positions such as `-1` and `.`.
 
-### Normalize PacBio outputs for PACKAGE build
+### Normalize PacBio outputs for mei-fiber build
 
 The normalization step is file-format normalization, not biological signal
 normalization. It checks the raw fibertools files and writes the same
@@ -131,12 +131,12 @@ mkdir -p "$OUT"
 
 python - <<PY
 from pathlib import Path
-from PACKAGE.extract.pacbio import (
+from mei_fiber.extract.pacbio import (
     inspect_pacbio_all,
     convert_pacbio_all_5mc_to_modkit,
     normalize_fibertools_block_bed,
 )
-from PACKAGE.extract.ont import flatten_nucleosome_bed12
+from mei_fiber.extract.ont import flatten_nucleosome_bed12
 
 pacbio = Path("$PACBIO_DIR")
 out = Path("$OUT")
@@ -145,28 +145,28 @@ print(inspect_pacbio_all(pacbio / "pacbio_all.tsv.gz"))
 
 print(convert_pacbio_all_5mc_to_modkit(
     pacbio / "pacbio_all.tsv.gz",
-    out / "pacbio_5mc_for_PACKAGE.tsv.gz",
+    out / "pacbio_5mc_for_MEI_Fiber.tsv.gz",
 ))
 
 print(normalize_fibertools_block_bed(
     pacbio / "pacbio_6ma.bed.gz",
-    out / "pacbio_6ma_for_PACKAGE.bed",
+    out / "pacbio_6ma_for_MEI_Fiber.bed",
     expected="single_base",
 ))
 
 print(normalize_fibertools_block_bed(
     pacbio / "pacbio_msp.bed.gz",
-    out / "pacbio_msp_for_PACKAGE.bed",
+    out / "pacbio_msp_for_MEI_Fiber.bed",
     expected="interval",
 ))
 
 normalize_fibertools_block_bed(
     pacbio / "pacbio_nuc.bed.gz",
-    out / "pacbio_nuc_for_PACKAGE.bed",
+    out / "pacbio_nuc_for_MEI_Fiber.bed",
     expected="interval",
 )
 n = flatten_nucleosome_bed12(
-    out / "pacbio_nuc_for_PACKAGE.bed",
+    out / "pacbio_nuc_for_MEI_Fiber.bed",
     out / "pacbio_nuc_features.csv",
 )
 print({"nucleosome_rows": n})
@@ -178,9 +178,9 @@ Check the normalized BED files before building:
 ```bash
 python - <<'PY'
 for p in [
-    "pacbio_msp_for_PACKAGE.bed",
-    "pacbio_6ma_for_PACKAGE.bed",
-    "pacbio_nuc_for_PACKAGE.bed",
+    "pacbio_msp_for_MEI_Fiber.bed",
+    "pacbio_6ma_for_MEI_Fiber.bed",
+    "pacbio_nuc_for_MEI_Fiber.bed",
 ]:
     print("\nChecking", p)
     with open(p) as f:
@@ -207,9 +207,9 @@ samples:
   - name: pacbio_test
     layers:
       nucleosomes: /path/to/package_test/pacbio_nuc_features.csv
-      5mC: /path/to/package_test/pacbio_5mc_for_PACKAGE.tsv.gz
-      6mA: /path/to/package_test/pacbio_6ma_for_PACKAGE.bed
-      msp: /path/to/package_test/pacbio_msp_for_PACKAGE.bed
+      5mC: /path/to/package_test/pacbio_5mc_for_MEI_Fiber.tsv.gz
+      6mA: /path/to/package_test/pacbio_6ma_for_MEI_Fiber.bed
+      msp: /path/to/package_test/pacbio_msp_for_MEI_Fiber.bed
       fire_accessibility: /path/to/package_test/acc.model.results.bed
 
 annotations:
@@ -219,14 +219,14 @@ annotations:
 Build and inspect:
 
 ```bash
-PACKAGE build --config configs/my_pacbio.yaml
-PACKAGE info /path/to/output/pacbio_fiber_database.h5
+mei-fiber build --config configs/my_pacbio.yaml
+mei-fiber info /path/to/output/pacbio_fiber_database.h5
 ```
 
 Then query a coordinate window:
 
 ```bash
-PACKAGE query \
+mei-fiber query \
   --db /path/to/output/pacbio_fiber_database.h5 \
   --sample pacbio_test \
   --region chr1:3000000-3050000
@@ -236,7 +236,7 @@ And test per-fiber accessors:
 
 ```bash
 python - <<'PY'
-from PACKAGE import FiberDatabase
+from mei_fiber import FiberDatabase
 
 db = "/path/to/output/pacbio_fiber_database.h5"
 sample = "pacbio_test"
@@ -259,7 +259,7 @@ PY
 
 ### Annotation queries
 
-Annotation BED files are written during `PACKAGE build`. If the HDF5 was built
+Annotation BED files are written during `mei-fiber build`. If the HDF5 was built
 without annotations, rebuild with the `annotations.master` path added to the YAML.
 The package does not yet expose a safe command for adding annotations to an
 existing HDF5 file in place.
@@ -268,7 +268,7 @@ After rebuilding with annotations:
 
 ```bash
 python - <<'PY'
-from PACKAGE import FiberDatabase
+from mei_fiber import FiberDatabase
 
 db = "/path/to/output/pacbio_fiber_database.h5"
 
@@ -287,14 +287,14 @@ PY
 
 ### FIRE co-accessibility preparation
 
-PACKAGE does not fit the upstream FIRE model. Begin with its FIRE-annotated BAM,
+MEI-Fiber does not fit the upstream FIRE model. Begin with its FIRE-annotated BAM,
 FDR FIRE peaks, and the accessibility BED generated by `ft fire --extract`. The
-accessibility BED is packaged as `fire_accessibility` during `PACKAGE build`.
+accessibility BED is packaged as `fire_accessibility` during `mei-fiber build`.
 
 Prepare the constituent intergenic peaks and stitched regions from the FDR peaks:
 
 ```bash
-PACKAGE coaccess prepare \
+mei-fiber coaccess prepare \
   --peaks /path/to/FDR-FIRE-peaks_merge.bed \
   --genes /path/to/gencode.vM23.basic.annotation.gff3 \
   --chrom-sizes /path/to/mm10.chrom.sizes \
@@ -319,20 +319,20 @@ It writes:
 The defaults use the standard conversion from 1-based inclusive GFF coordinates to
 0-based half-open BED coordinates. For a historical comparison run, add
 `--legacy-gff-coordinates` to reproduce the old direct-coordinate interpretation.
-PACKAGE retains valid terminal peaks that the old loop could omit.
+MEI-Fiber retains valid terminal peaks that the old loop could omit.
 
 ### FIRE co-accessibility coverage
 
-If the PacBio HDF5 was built with `fire_accessibility`, PACKAGE can now regenerate
+If the PacBio HDF5 was built with `fire_accessibility`, MEI-Fiber can now regenerate
 the legacy `Cov.bed` input using the prepared regions and the HDF5 FIRE layer:
 
 ```bash
-PACKAGE coaccess cov \
+mei-fiber coaccess cov \
   --db /path/to/output/pacbio_fiber_database.h5 \
   --sample pacbio_test \
   --stitched /path/to/coaccess_prepared/FIRE_stitched.bed \
   --peaks /path/to/coaccess_prepared/FIRE_peaks_intergenic.bed \
-  --out /path/to/Cov_PACKAGE.bed
+  --out /path/to/Cov_MEI_Fiber.bed
 ```
 
 The output has the same nine columns as the legacy file:
@@ -341,7 +341,7 @@ The output has the same nine columns as the legacy file:
 element_chr  element_start  element_end  stitched_chr  stitched_start  stitched_end  fiber_id  fire_score  overlap_bp
 ```
 
-During HDF5 build, PACKAGE attaches `fire_accessibility` calls only to fibers that
+During HDF5 build, MEI-Fiber attaches `fire_accessibility` calls only to fibers that
 exist in the packaged molecule table for that chromosome. In validation against the
 legacy PacBio co-accessibility run, using the original large
 `acc.model.results.sort.bed` reproduced `Cov.bed` to within three rows out of
@@ -352,16 +352,16 @@ defines the molecule universe and optional layers attach to those fibers.
 To make the legacy enhancer-by-fiber JSON object:
 
 ```bash
-PACKAGE coaccess object \
-  --cov /path/to/Cov_PACKAGE.bed \
-  --out /path/to/scored_PACKAGE_obj.json
+mei-fiber coaccess object \
+  --cov /path/to/Cov_MEI_Fiber.bed \
+  --out /path/to/scored_MEI_Fiber_obj.json
 ```
 
 To rank co-accessible constituent FIRE element pairs and stitched regions:
 
 ```bash
-PACKAGE coaccess rank \
-  --object /path/to/scored_PACKAGE_obj.json \
+mei-fiber coaccess rank \
+  --object /path/to/scored_MEI_Fiber_obj.json \
   --outdir /path/to/coaccess_rank
 ```
 
@@ -404,7 +404,7 @@ LC_ALL=C sort -u prepared_legacy/FIRE_stitched.bed > package.stitched.sorted.bed
 comm -3 legacy.stitched.sorted.bed package.stitched.sorted.bed > stitched_membership_difference.tsv
 ```
 
-Inspect differences at chromosome ends separately because PACKAGE intentionally
+Inspect differences at chromosome ends separately because MEI-Fiber intentionally
 retains valid final peaks. After the BED comparison, continue through `cov`,
 `object`, and `rank`, then run the co-accessibility validation benchmark below.
 
@@ -414,16 +414,16 @@ When legacy `Cov.bed`, object, pair-rank, and cluster-rank outputs are available
 compare the full workflow with the validation benchmark:
 
 ```bash
-python -m PACKAGE.benchmark.coaccessibility \
+python -m mei_fiber.benchmark.coaccessibility \
   --legacy-ce /path/to/legacy/ce_rank.txt \
-  --package-ce /path/to/package/ce_rank.txt \
+  --mei-fiber-ce /path/to/package/ce_rank.txt \
   --legacy-cluster /path/to/legacy/cluster_rank.txt \
-  --package-cluster /path/to/package/cluster_rank.txt \
+  --mei-fiber-cluster /path/to/package/cluster_rank.txt \
   --legacy-cov /path/to/legacy/Cov.sorted.bed \
-  --package-cov /path/to/package/Cov.sorted.bed \
-  --cov-difference /path/to/Cov.missing_from_PACKAGE.bed \
+  --mei-fiber-cov /path/to/package/Cov.sorted.bed \
+  --cov-difference /path/to/Cov.missing_from_MEI_Fiber.bed \
   --legacy-object /path/to/legacy/scored_obj.json \
-  --package-object /path/to/package/scored_PACKAGE_obj.json \
+  --mei-fiber-object /path/to/package/scored_MEI_Fiber_obj.json \
   --outdir benchmark/coaccess_validation
 ```
 
@@ -432,11 +432,11 @@ into one unordered biological pair. It reports exact membership, score and rank
 correlations, top-k overlap, `Super` call agreement, and order-independent
 fingerprints for the large Cov files.
 
-In the validated PacBio dataset, PACKAGE recovered all 74,435 unique constituent
+In the validated PacBio dataset, MEI-Fiber recovered all 74,435 unique constituent
 pairs and every one of 15,287 legacy stitched regions. Pair-score Pearson correlation
 was 0.990, rank Spearman correlation was 0.997, and pair `Super` calls agreed for
-99.93% of pairs. PACKAGE retained 601 additional stitched regions that are all
-candidates for a legacy `0.5` sentinel collision. The PACKAGE Cov file differed by
+99.93% of pairs. MEI-Fiber retained 601 additional stitched regions that are all
+candidates for a legacy `0.5` sentinel collision. The MEI-Fiber Cov file differed by
 three documented fibers; adding those known rows produced an exact multiset match to
 the 6.7-million-row legacy Cov file.
 
@@ -449,26 +449,26 @@ a panel-by-panel explanation.
 
 ### Current update behavior
 
-HDF5 technically supports append-mode updates, but PACKAGE currently treats a
+HDF5 technically supports append-mode updates, but MEI-Fiber currently treats a
 database build as a reproducible artifact: annotations and molecular layers are
-written during `PACKAGE build`. To add annotations or `fire_accessibility`, rebuild
+written during `mei-fiber build`. To add annotations or `fire_accessibility`, rebuild
 from the same intermediate files with those paths included.
 
 ## How a Query Uses the Database
 
 For annotation-centered queries such as "find CGI methylation in one sample",
-PACKAGE first loads the shared annotation regions, groups them by chromosome, and
+MEI-Fiber first loads the shared annotation regions, groups them by chromosome, and
 then works chromosome by chromosome. The chromosome-level arrays are loaded once
 and reused across all regions on that chromosome.
 
-Within a chromosome, PACKAGE finds overlapping fibers from the fiber metadata
+Within a chromosome, MEI-Fiber finds overlapping fibers from the fiber metadata
 arrays, then uses `_indices` to jump directly to each fiber's row range in the
 requested feature arrays. For example, the 5mC slice index maps a fiber integer
-ID to the start and end rows for that fiber's CpG calls. PACKAGE slices only that
+ID to the start and end rows for that fiber's CpG calls. MEI-Fiber slices only that
 range and masks it to the query interval, then returns per-fiber summaries such
 as CpG count and percent methylated.
 
-![PACKAGE CGI methylation query walkthrough](figures/architecture/package_query_walkthrough_cgi_methylation.png)
+![MEI-Fiber CGI methylation query walkthrough](figures/architecture/mei_fiber_query_walkthrough_cgi_methylation.png)
 
 ## Visualization Examples
 
@@ -478,7 +478,7 @@ Install the optional plotting dependencies before running these examples:
 pip install -e ".[viz]"
 ```
 
-The examples below use an existing PACKAGE HDF5 database. They are intended as
+The examples below use an existing MEI-Fiber HDF5 database. They are intended as
 small, inspectable outputs rather than final manuscript layouts.
 
 ### ECDF Summary Plots
@@ -678,13 +678,13 @@ legibility.
 
 ## Completion Checklist
 
-A successful current-stage PACKAGE run should leave the following evidence:
+A successful current-stage MEI-Fiber run should leave the following evidence:
 
 - extraction manifests containing BAM QC, tool versions, commands, and output sizes;
 - one HDF5 database containing the expected samples, chromosomes, molecular layers,
   and annotations;
 - a matching `.index.pkl` sidecar when spatial indexing is enabled;
-- a passing `PACKAGE info` summary and at least one coordinate query;
+- a passing `mei-fiber info` summary and at least one coordinate query;
 - one inspectable visualization, such as an ECDF, centered heatmap/metaplot, or
   single-molecule regional view; and
 - for PacBio FIRE analyses, `Cov.bed`, the enhancer-by-fiber object, pair and cluster

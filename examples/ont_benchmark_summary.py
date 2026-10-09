@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create summary figures from PACKAGE ONT benchmark outputs."""
+"""Create summary figures from MEI-Fiber ONT benchmark outputs."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import argparse
 import json
 from pathlib import Path
 from typing import Any
-
 
 GB = 1024**3
 LAYER_ORDER = ["fibers", "5mC", "5hmC", "6mA", "msp", "nucleosomes"]
@@ -44,7 +43,7 @@ def plot_storage_summary(summary: dict[str, Any], outdir: Path, bam_paths: list[
     if bam_paths:
         labels.append("Input BAM")
         sizes.append(sum(path.stat().st_size for path in bam_paths if path.exists()))
-    labels.extend(["Extracted\nintermediates", "PACKAGE\nHDF5", "Spatial\nindex"])
+    labels.extend(["Extracted\nintermediates", "MEI-Fiber\nHDF5", "Spatial\nindex"])
     sizes.extend(
         [
             int(summary.get("intermediate_size_bytes", 0)),
@@ -54,7 +53,7 @@ def plot_storage_summary(summary: dict[str, Any], outdir: Path, bam_paths: list[
     )
 
     fig, ax = plt.subplots(figsize=(6.7, 4.2), constrained_layout=True)
-    colors = ["#9ca3af", "#4c78a8", "#59a14f", "#b07aa1"][-len(labels):]
+    colors = ["#9ca3af", "#4c78a8", "#59a14f", "#b07aa1"][-len(labels) :]
     bars = ax.bar(labels, [_gb(size) for size in sizes], color=colors)
     ax.set_ylabel("Size (GB)")
     ax.set_title("Storage footprint")
@@ -96,10 +95,7 @@ def plot_record_counts(summary: dict[str, Any], outdir: Path) -> None:
     fig, ax = plt.subplots(figsize=(7.2, 4.4), constrained_layout=True)
     bottoms = [0.0] * len(samples)
     for layer in LAYER_ORDER:
-        values = [
-            summary["samples"][sample].get(layer, 0) / 1e9
-            for sample in samples
-        ]
+        values = [summary["samples"][sample].get(layer, 0) / 1e9 for sample in samples]
         if not any(values):
             continue
         ax.bar(samples, values, bottom=bottoms, label=layer, color=LAYER_COLORS.get(layer))
@@ -116,8 +112,8 @@ def plot_record_counts(summary: dict[str, Any], outdir: Path) -> None:
 
 def plot_random_query_results(results_csv: Path, outdir: Path, outlier_fibers: int) -> None:
     plt, _, _ = _require_matplotlib()
-    from matplotlib.colors import LogNorm
     import pandas as pd
+    from matplotlib.colors import LogNorm
 
     df = pd.read_csv(results_csv)
     if df.empty:
@@ -191,15 +187,12 @@ def plot_random_query_results(results_csv: Path, outdir: Path, outlier_fibers: i
 
     trimmed = df[~df["is_outlier"]]
     if not trimmed.empty:
-        summary = (
-            trimmed.groupby(["sample", "mode", "region_size_bp"], as_index=False)
-            .agg(
-                n_queries=("elapsed_seconds", "size"),
-                median_seconds=("elapsed_seconds", "median"),
-                q25_seconds=("elapsed_seconds", lambda values: values.quantile(0.25)),
-                q75_seconds=("elapsed_seconds", lambda values: values.quantile(0.75)),
-                max_n_fibers=("n_fibers", "max"),
-            )
+        summary = trimmed.groupby(["sample", "mode", "region_size_bp"], as_index=False).agg(
+            n_queries=("elapsed_seconds", "size"),
+            median_seconds=("elapsed_seconds", "median"),
+            q25_seconds=("elapsed_seconds", lambda values: values.quantile(0.25)),
+            q75_seconds=("elapsed_seconds", lambda values: values.quantile(0.75)),
+            max_n_fibers=("n_fibers", "max"),
         )
         summary.to_csv(outdir / "query_speed_summary_without_outliers.csv", index=False)
 
@@ -257,9 +250,9 @@ def plot_workflow(outdir: Path) -> None:
     ax.set_axis_off()
     boxes = [
         ("ONT fiberseq\nBAM", 0.04, 0.55, "#dbeafe"),
-        ("PACKAGE extract\nmodkit + ft", 0.24, 0.55, "#e0f2fe"),
+        ("MEI-Fiber extract\nmodkit + ft", 0.24, 0.55, "#e0f2fe"),
         ("Intermediate files\n5mC/5hmC, 6mA,\nMSP, nucleosomes", 0.44, 0.55, "#fef3c7"),
-        ("PACKAGE build\nHDF5 + indices", 0.64, 0.55, "#dcfce7"),
+        ("MEI-Fiber build\nHDF5 + indices", 0.64, 0.55, "#dcfce7"),
         ("Query + figures\nregions, annotations,\nsingle molecules", 0.84, 0.55, "#f3e8ff"),
     ]
     for text, x, y, color in boxes:
@@ -308,8 +301,8 @@ def plot_workflow(outdir: Path) -> None:
         fontsize=11,
         transform=ax.transAxes,
     )
-    fig.savefig(outdir / "package_ont_workflow.png", dpi=220)
-    fig.savefig(outdir / "package_ont_workflow.pdf")
+    fig.savefig(outdir / "mei_fiber_ont_workflow.png", dpi=220)
+    fig.savefig(outdir / "mei_fiber_ont_workflow.pdf")
     plt.close(fig)
 
 
@@ -319,7 +312,7 @@ def write_text_summary(summary: dict[str, Any], outdir: Path, bam_paths: list[Pa
     index = int(summary.get("spatial_index_size_bytes", 0))
     bam_size = sum(path.stat().st_size for path in bam_paths if path.exists())
     lines = [
-        "# PACKAGE ONT Benchmark Summary",
+        "# MEI-Fiber ONT Benchmark Summary",
         "",
         (
             f"- Input BAM size: {_gb(bam_size):.2f} GB"
@@ -333,8 +326,7 @@ def write_text_summary(summary: dict[str, Any], outdir: Path, bam_paths: list[Pa
     if intermediates and database:
         lines.append(f"- Intermediate/HDF5 ratio: {intermediates / database:.2f}x")
         lines.append(
-            f"- Storage reduction from intermediates: "
-            f"{100 * (1 - database / intermediates):.2f}%"
+            f"- Storage reduction from intermediates: {100 * (1 - database / intermediates):.2f}%"
         )
     if database and index:
         lines.append(f"- Spatial-index overhead relative to HDF5: {100 * index / database:.2f}%")

@@ -6,8 +6,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from PACKAGE.config import Config
-from PACKAGE.extract.ont import extract_sample, flatten_nucleosome_bed12
+from mei_fiber.config import Config
+from mei_fiber.extract.ont import extract_sample, flatten_nucleosome_bed12
 
 _NUC_BED12 = """\
 chr1\t100\t500\tfiber_a\t0\t+\t100\t500\t0\t4\t0,80,70,0\t0,20,150,400
@@ -84,7 +84,7 @@ def test_extract_sample_runs_validated_ont_commands(tmp_path, monkeypatch):
     commands: list[list[str]] = []
 
     monkeypatch.setattr(
-        "PACKAGE.extract.ont.shutil.which",
+        "mei_fiber.extract.ont.shutil.which",
         lambda name: f"/tools/{name}",
     )
 
@@ -98,7 +98,7 @@ def test_extract_sample_runs_validated_ont_commands(tmp_path, monkeypatch):
         elif command[1] == "extract":
             Path(command[3]).write_text("ft output\n")
 
-    monkeypatch.setattr("PACKAGE.extract.ont.subprocess.run", fake_run)
+    monkeypatch.setattr("mei_fiber.extract.ont.subprocess.run", fake_run)
 
     extract_sample(cfg, sample)
 
@@ -140,12 +140,12 @@ def test_extract_sample_skips_existing_outputs(tmp_path, monkeypatch):
         path.write_text("existing")
 
     monkeypatch.setattr(
-        "PACKAGE.extract.ont.shutil.which",
+        "mei_fiber.extract.ont.shutil.which",
         lambda name: f"/tools/{name}",
     )
     commands = []
     monkeypatch.setattr(
-        "PACKAGE.extract.ont.subprocess.run",
+        "mei_fiber.extract.ont.subprocess.run",
         lambda command, check: commands.append(command),
     )
 
@@ -168,13 +168,13 @@ def test_nucleosome_only_extraction_does_not_require_modkit(tmp_path, monkeypatc
     def fake_which(name):
         return "/tools/ft" if name == "ft" else None
 
-    monkeypatch.setattr("PACKAGE.extract.ont.shutil.which", fake_which)
+    monkeypatch.setattr("mei_fiber.extract.ont.shutil.which", fake_which)
 
     def fake_run(command, check):
         assert check is True
         Path(command[3]).write_text(_NUC_BED12)
 
-    monkeypatch.setattr("PACKAGE.extract.ont.subprocess.run", fake_run)
+    monkeypatch.setattr("mei_fiber.extract.ont.subprocess.run", fake_run)
     extract_sample(cfg, sample)
     assert sample.layers["nucleosomes"].exists()
 
@@ -189,24 +189,24 @@ def test_extract_sample_validates_bam_and_writes_manifest(tmp_path, monkeypatch)
         path.write_text("existing output")
 
     monkeypatch.setattr(
-        "PACKAGE.extract.ont.shutil.which",
+        "mei_fiber.extract.ont.shutil.which",
         lambda name: f"/tools/{name}",
     )
     monkeypatch.setattr(
-        "PACKAGE.extract.ont.validate_bam",
+        "mei_fiber.extract.ont.validate_bam",
         lambda *args: {
             "records_checked_for_tags": 10,
             "records_with_mm_ml_tags": 9,
         },
     )
     monkeypatch.setattr(
-        "PACKAGE.extract.ont.capture_tool_versions",
+        "mei_fiber.extract.ont.capture_tool_versions",
         lambda tools: {name: "test version" for name in tools},
     )
 
     extract_sample(cfg, sample)
 
-    manifest = sample.layers["nucleosomes"].parent / "PACKAGE_manifest_d0.json"
+    manifest = sample.layers["nucleosomes"].parent / "MEI-Fiber_manifest_d0.json"
     data = json.loads(manifest.read_text())
     assert data["sample"] == "d0"
     assert data["platform"] == "ont"

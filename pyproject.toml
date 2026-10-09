@@ -3,9 +3,9 @@ requires = ["setuptools>=64", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "PACKAGE"
-version = "0.4.0"
-description = "Single-molecule epigenomic integration for ONT and PacBio Fiber-seq data"
+name = "MEI-Fiber"
+version = "0.5.0"
+description = "Multimodal Epigenetic Integration with Fiber-seq"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -75,21 +75,22 @@ viz = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/mc3365/PACKAGE"
-Repository = "https://github.com/mc3365/PACKAGE"
-Issues = "https://github.com/mc3365/PACKAGE/issues"
-Documentation = "https://mc3365.github.io/PACKAGE"
+Homepage = "https://github.com/mc3365/MEI-Fiber"
+Repository = "https://github.com/mc3365/MEI-Fiber"
+Issues = "https://github.com/mc3365/MEI-Fiber/issues"
+Documentation = "https://mc3365.github.io/MEI-Fiber"
 
-# CLI entry point: after `pip install`, users can type `PACKAGE` in the terminal.
+# ``PACKAGE`` remains as a compatibility command for existing HPC scripts.
 [project.scripts]
-PACKAGE = "PACKAGE.cli:cli"
+mei-fiber = "mei_fiber.cli:cli"
+PACKAGE = "mei_fiber.cli:cli"
 
 # Tell setuptools to look in src/ for the package.
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-PACKAGE = ["py.typed"]   # marks the package as type-annotated for mypy users
+mei_fiber = ["py.typed"]   # marks the package as type-annotated for mypy users
 
 # ---------------------------------------------------------------------------
 # Tool configuration

@@ -1,7 +1,7 @@
-site_name: PACKAGE
-site_description: Single-molecule epigenomic analysis for long-read Fiber-seq data
-repo_url: https://github.com/mc3365/PACKAGE
-repo_name: mc3365/PACKAGE
+site_name: MEI-Fiber
+site_description: Multimodal Epigenetic Integration with Fiber-seq
+repo_url: https://github.com/mc3365/MEI-Fiber
+repo_name: mc3365/MEI-Fiber
 
 theme:
   name: material

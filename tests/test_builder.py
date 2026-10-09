@@ -1,4 +1,4 @@
-"""Tests for PACKAGE.db.builder.
+"""Tests for mei_fiber.db.builder.
 
 Batch 1 scope: foundation + format parsers. Builds tiny in-memory text fixtures
 representing real ft-extract / modkit-extract output and verifies each parser
@@ -18,9 +18,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from PACKAGE.config import Config
-from PACKAGE.db.builder import FiberDatabaseBuilder, build_database
-from PACKAGE.db.database import FiberDatabase
+from mei_fiber.config import Config
+from mei_fiber.db.builder import FiberDatabaseBuilder, build_database
+from mei_fiber.db.database import FiberDatabase
 
 # ---------------------------------------------------------------------------
 # Tiny fixture inputs
@@ -112,7 +112,7 @@ def test_build_database_calls_builder(tmp_path, monkeypatch):
         def build(self):
             called["yes"] = True
 
-    monkeypatch.setattr("PACKAGE.db.builder.FiberDatabaseBuilder", MockBuilder)
+    monkeypatch.setattr("mei_fiber.db.builder.FiberDatabaseBuilder", MockBuilder)
     cfg = Config.model_validate({
         "output_dir": str(tmp_path),
         "samples": [
@@ -623,6 +623,8 @@ def test_build_database_end_to_end_from_extracted_files(tmp_path):
         assert "d0/fiber_lookup/fiber_ids" in hf
         assert "annotations/master/features/CGI" in hf
         assert hf["metadata"].attrs["methylation_threshold"] == 0.5
+        assert hf["metadata"].attrs["mei_fiber_version"] == "0.5.0"
+        assert hf["metadata"].attrs["package_version"] == "0.5.0"
 
     with FiberDatabase(cfg.output_path) as db:
         assert db.samples == ["d0"]

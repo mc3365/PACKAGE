@@ -6,8 +6,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from PACKAGE.analysis import export_global_feature_fractions
-from PACKAGE.viz import plot_feature_ecdfs
+from mei_fiber.analysis import export_global_feature_fractions
+from mei_fiber.viz import plot_feature_ecdfs
 
 
 def _parse_color_map(values: list[str] | None) -> dict[str, str]:

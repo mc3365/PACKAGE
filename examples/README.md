@@ -14,10 +14,10 @@ Runnable examples demonstrating common workflows.
 PacBio FIRE co-accessibility uses the main CLI rather than a separate example script:
 
 ```bash
-PACKAGE coaccess cov --help
-PACKAGE coaccess object --help
-PACKAGE coaccess rank --help
-python -m PACKAGE.benchmark.coaccessibility --help
+mei-fiber coaccess cov --help
+mei-fiber coaccess object --help
+mei-fiber coaccess rank --help
+python -m mei_fiber.benchmark.coaccessibility --help
 ```
 
 ECDF plots accept `--sample-colors SAMPLE=COLOR`; centered metaplots accept

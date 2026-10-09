@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import gzip
 
-from PACKAGE.utils import smart_open
+from mei_fiber.utils import smart_open
 
 
 def test_smart_open_reads_real_gzip(tmp_path):

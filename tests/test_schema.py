@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from PACKAGE.db import schema
+from mei_fiber.db import schema
 
 
 def test_supported_layers_have_field_definitions():

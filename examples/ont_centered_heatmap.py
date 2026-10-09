@@ -8,9 +8,9 @@ from pathlib import Path
 
 import numpy as np
 
-from PACKAGE.analysis import export_centered_annotation_matrices
-from PACKAGE.analysis.heatmap import EXTENSION_CONFIG, PROMOTER_TYPES
-from PACKAGE.viz import plot_centered_annotation_heatmap, plot_centered_metaplot
+from mei_fiber.analysis import export_centered_annotation_matrices
+from mei_fiber.analysis.heatmap import EXTENSION_CONFIG, PROMOTER_TYPES
+from mei_fiber.viz import plot_centered_annotation_heatmap, plot_centered_metaplot
 
 
 def _count_regions(npz_path: Path) -> int:

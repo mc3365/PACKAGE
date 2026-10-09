@@ -1,20 +1,15 @@
-"""PACKAGE — single-molecule epigenomic analysis for long-read Fiber-seq data.
+"""Compatibility namespace for the former PACKAGE project name.
 
-Public API:
-
-    from PACKAGE.db import FiberDatabase
-    from PACKAGE.db.builder import build_database
-    from PACKAGE.extract import extract_ont
-    from PACKAGE.viz import single_molecule_heatmap
-
-See README.md for a quickstart, examples/ for tutorial notebooks, and docs/ for the
-full API reference.
+New code should import :mod:`mei_fiber`. This namespace remains available so
+existing analysis scripts can migrate without an immediate breaking change.
 """
 
-__version__ = "0.4.0"
+from __future__ import annotations
 
-# Re-export the most commonly used names so users can do `from PACKAGE import X`.
-# Kept minimal — most users should import from submodules.
-from PACKAGE.db.database import FiberDatabase
+import mei_fiber as _mei_fiber
+from mei_fiber import FiberDatabase, __version__
+
+# Let imports such as ``PACKAGE.db`` resolve to the renamed implementation.
+__path__ = _mei_fiber.__path__
 
 __all__ = ["FiberDatabase", "__version__"]

@@ -12,10 +12,10 @@
 ## From source (recommended during development)
 
 ```bash
-git clone https://github.com/mc3365/PACKAGE.git
-cd PACKAGE
+git clone https://github.com/mc3365/MEI-Fiber.git
+cd MEI-Fiber
 conda env create -f environments/ont.yml
-conda activate package-ont
+conda activate mei-fiber-ont
 pip install -e ".[dev,viz]"
 ```
 
@@ -29,11 +29,15 @@ The `[viz]` extra installs Matplotlib.
 ## Verify the install
 
 ```bash
-PACKAGE --version
+mei-fiber --version
 pytest
 ```
 
 Both commands should succeed.
+
+MEI-Fiber was renamed from `PACKAGE` in v0.5.0. Use `mei-fiber` and `mei_fiber` for
+new command-line and Python code. The former command and namespace remain temporary
+compatibility aliases so existing analysis scripts continue to run.
 
 ## On an HPC cluster
 

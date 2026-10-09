@@ -7,7 +7,7 @@ import json
 
 import numpy as np
 
-from PACKAGE.analysis import (
+from mei_fiber.analysis import (
     cov_to_object,
     export_annotation_matrices,
     export_centered_annotation_matrices,
@@ -17,7 +17,7 @@ from PACKAGE.analysis import (
     prepare_coaccessibility_regions,
     rank_coaccessibility_object,
 )
-from PACKAGE.analysis.heatmap import smooth_methylation
+from mei_fiber.analysis.heatmap import smooth_methylation
 
 
 def test_export_global_feature_fractions_writes_expected_columns(

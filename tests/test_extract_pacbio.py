@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from PACKAGE.extract.pacbio import (
+from mei_fiber.extract.pacbio import (
     convert_pacbio_all_5mc_to_modkit,
     inspect_pacbio_all,
     normalize_fibertools_block_bed,

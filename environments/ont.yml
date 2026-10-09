@@ -1,4 +1,4 @@
-name: package-ont
+name: mei-fiber-ont
 channels:
   - conda-forge
   - bioconda
@@ -8,4 +8,3 @@ dependencies:
   - samtools=1.22.1
   - ont-modkit=0.5.0
   - fibertools-rs=0.8.0
-

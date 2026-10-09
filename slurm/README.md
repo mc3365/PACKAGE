@@ -1,9 +1,9 @@
 # SLURM scripts
 
-HPC job submission scripts for running `PACKAGE` on the Yale McCleary/Bouchet cluster.
+HPC job submission scripts for running `MEI-Fiber` on the Yale McCleary/Bouchet cluster.
 
 These are **not installed by pip** — they live here as reference and for direct submission
-via `sbatch`. They wrap the `PACKAGE` CLI with cluster-specific paths, resource
+via `sbatch`. They wrap the `MEI-Fiber` CLI with cluster-specific paths, resource
 requests, and module loading.
 
 ## Full-build benchmark
@@ -21,12 +21,12 @@ Submit with absolute paths:
 sbatch --export=ALL,\
 CONFIG=/absolute/path/configs/benchmark_ont.yaml,\
 PYTHON=/absolute/path/env/bin/python,\
-PACKAGE_ROOT=/absolute/path/PACKAGE \
+MEI_FIBER_ROOT=/absolute/path/MEI-Fiber \
 slurm/benchmark_full_build.sh
 ```
 
 Results are written under `benchmark/build_<job_id>/` unless `RESULTS_DIR` is supplied.
 The HDF5 database itself is written to the location specified by the benchmark YAML.
 
-`run_database_v8.sh` is retained only as a record of the legacy V8 build. New PACKAGE
-builds should use the benchmark script or `PACKAGE build --config <yaml>`.
+`run_database_v8.sh` is retained only as a record of the legacy V8 build. New MEI-Fiber
+builds should use the benchmark script or `mei-fiber build --config <yaml>`.

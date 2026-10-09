@@ -1,4 +1,4 @@
-"""Tests for PACKAGE.config."""
+"""Tests for mei_fiber.config."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from PACKAGE.config import Config, load_config
+from mei_fiber.config import Config, load_config
 
 
 def _write_yaml(path: Path, data: dict) -> Path:

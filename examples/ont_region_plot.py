@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Create a single-molecule regional plot from a PACKAGE ONT database."""
+"""Create a single-molecule regional plot from a MEI-Fiber ONT database."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-from PACKAGE.db import FiberDatabase
-from PACKAGE.viz import single_molecule_heatmap
+from mei_fiber.db import FiberDatabase
+from mei_fiber.viz import single_molecule_heatmap
 
 
 def parse_region(value: str) -> tuple[str, int, int]:
@@ -24,7 +24,7 @@ def parse_region(value: str) -> tuple[str, int, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--db", required=True, type=Path, help="PACKAGE HDF5 database")
+    parser.add_argument("--db", required=True, type=Path, help="MEI-Fiber HDF5 database")
     parser.add_argument("--region", required=True, type=parse_region, help="chrom:start-end")
     parser.add_argument("--sample", help="sample name; defaults to the first sample")
     parser.add_argument("--layer", choices=("5mC", "5hmC", "6mA"), default="5mC")

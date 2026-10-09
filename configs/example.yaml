@@ -1,10 +1,10 @@
-# Example PACKAGE configuration.
+# Example MEI-Fiber configuration.
 # Copy this to your own config and edit the paths.
 #
-# Run: PACKAGE build --config configs/example.yaml
+# Run: mei-fiber build --config configs/example.yaml
 
 output_dir: /nfs/roberts/scratch/pi_zs296/mc3365/long_read/first_run/out/h5
-output_file: fiber_database_PACKAGE.h5
+output_file: fiber_database_MEI_Fiber.h5
 
 # Reference genome (used by the extract phase, not by build).
 reference: /nfs/roberts/project/pi_zs296/mc3365/database/genome/genome.fa

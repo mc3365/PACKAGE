@@ -5,11 +5,11 @@ from __future__ import annotations
 import csv
 import json
 
-from PACKAGE.benchmark.annotation import run_annotation_benchmark
-from PACKAGE.benchmark.coaccessibility import run_coaccessibility_validation
-from PACKAGE.benchmark.query_speed import run_query_speed_benchmark
-from PACKAGE.benchmark.storage import run_storage_benchmark
-from PACKAGE.db import FiberDatabase
+from mei_fiber.benchmark.annotation import run_annotation_benchmark
+from mei_fiber.benchmark.coaccessibility import run_coaccessibility_validation
+from mei_fiber.benchmark.query_speed import run_query_speed_benchmark
+from mei_fiber.benchmark.storage import run_storage_benchmark
+from mei_fiber.db import FiberDatabase
 
 
 def test_storage_benchmark_counts_database_layers(tiny_db_path_with_layers, tmp_path):
@@ -104,9 +104,9 @@ def test_annotation_benchmark_times_real_annotation_query(
 
 def test_coaccessibility_validation_normalizes_directional_pairs(tmp_path):
     legacy_ce = tmp_path / "legacy_ce.txt"
-    package_ce = tmp_path / "package_ce.txt"
+    mei_fiber_ce = tmp_path / "mei_fiber_ce.txt"
     legacy_cluster = tmp_path / "legacy_cluster.txt"
-    package_cluster = tmp_path / "package_cluster.txt"
+    mei_fiber_cluster = tmp_path / "mei_fiber_cluster.txt"
 
     legacy_ce.write_text(
         "chr1:10-20\tchr1:30-40\tchr1:0-100\t4.0\t1\tSuper\n"
@@ -114,34 +114,34 @@ def test_coaccessibility_validation_normalizes_directional_pairs(tmp_path):
         "chr1:110-120\tchr1:130-140\tchr1:100-200\t2.0\t3\t\n"
         "chr1:130-140\tchr1:110-120\tchr1:100-200\t2.0\t4\t\n"
     )
-    package_ce.write_text(
+    mei_fiber_ce.write_text(
         "chr1:10-20\tchr1:30-40\tchr1:0-100\t5.0\t1\tSuper\n"
         "chr1:110-120\tchr1:130-140\tchr1:100-200\t1.5\t2\t\n"
     )
     legacy_cluster.write_text(
         "chr1:10-20, chr1:30-40\tchr1:0-100\t2\t4.0\t1\tSuper\t3\t1\t1\t2\n"
     )
-    package_cluster.write_text(
+    mei_fiber_cluster.write_text(
         "chr1:10-20, chr1:30-40\tchr1:0-100\t2\t5.0\t1\tSuper\t3\t1\t1\t2\n"
         "chr1:110-120, chr1:130-140\tchr1:100-200\t2\t1.5\t2\t\t1\t1\t1\t3\n"
     )
 
     legacy_cov = tmp_path / "legacy_cov.bed"
-    package_cov = tmp_path / "package_cov.bed"
+    mei_fiber_cov = tmp_path / "mei_fiber_cov.bed"
     difference = tmp_path / "difference.bed"
-    package_cov.write_text("row-b\nrow-a\n")
+    mei_fiber_cov.write_text("row-b\nrow-a\n")
     difference.write_text("row-c\n")
     legacy_cov.write_text("row-c\nrow-a\nrow-b\n")
 
     output_dir = tmp_path / "validation"
     summary = run_coaccessibility_validation(
         legacy_ce,
-        package_ce,
+        mei_fiber_ce,
         legacy_cluster,
-        package_cluster,
+        mei_fiber_cluster,
         output_dir,
         legacy_cov=legacy_cov,
-        package_cov=package_cov,
+        mei_fiber_cov=mei_fiber_cov,
         cov_difference=difference,
     )
 
@@ -149,9 +149,9 @@ def test_coaccessibility_validation_normalizes_directional_pairs(tmp_path):
     assert summary["pairs"]["legacy_unique_unordered_pairs"] == 2
     assert summary["pairs"]["legacy_directional_duplicate_rows"] == 2
     assert summary["pairs"]["shared_pairs"] == 2
-    assert summary["clusters"]["package_only_clusters"] == 1
-    assert summary["clusters"]["package_only_half_jaccard_sentinel_candidates"] == 1
-    assert summary["cov"]["package_plus_difference_matches_legacy"] is True
+    assert summary["clusters"]["mei_fiber_only_clusters"] == 1
+    assert summary["clusters"]["mei_fiber_only_half_jaccard_sentinel_candidates"] == 1
+    assert summary["cov"]["mei_fiber_plus_difference_matches_legacy"] is True
     assert (output_dir / "validation_summary.json").exists()
     assert (output_dir / "pair_rank_agreement.csv").exists()
     assert (output_dir / "cluster_rank_agreement.csv").exists()
