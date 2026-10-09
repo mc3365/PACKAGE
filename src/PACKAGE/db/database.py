@@ -612,7 +612,8 @@ class FiberDatabase:
 
         Args:
             chrom_data: Output of :meth:`load_chromosome_data`.
-            start, end: Region bounds (0-based, half-open).
+            start: Region start coordinate (0-based).
+            end: Region end coordinate (half-open).
             min_coverage: Minimum fraction of region length the fiber must cover.
 
         Returns:

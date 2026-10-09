@@ -4,8 +4,10 @@ This page lists user-facing parameters for ONT and PacBio workflows. It is
 organized by workflow stage: extraction, HDF5 build, query, benchmark, and plotting.
 
 ONT is validated end to end. PacBio normalizes fibertools outputs into the same
-HDF5 schema for nucleosomes, 5mC, 6mA, MSPs, and optional FIRE/accessibility calls.
-PacBio 5hmC is not currently built.
+HDF5 schema for nucleosomes, 5mC, 6mA, MSPs, and optional FIRE/accessibility calls;
+FIRE coverage, object construction, ranking, and legacy validation are available.
+PacBio 5hmC is not currently built, and upstream FIRE model fitting remains outside
+PACKAGE.
 
 ## YAML Configuration
 

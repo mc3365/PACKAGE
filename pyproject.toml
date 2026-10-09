@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "PACKAGE"
 version = "0.4.0"
-description = "Single-molecule epigenomic analysis for Oxford Nanopore long-read data"
+description = "Single-molecule epigenomic integration for ONT and PacBio Fiber-seq data"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -21,6 +21,8 @@ keywords = [
     "dna-methylation",
     "chromatin-accessibility",
     "oxford-nanopore",
+    "pacbio",
+    "co-accessibility",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

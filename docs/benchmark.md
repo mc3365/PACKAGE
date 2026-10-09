@@ -1,13 +1,13 @@
-# ONT Benchmark
+# Benchmarking and Validation
 
 The ONT benchmark records database scale and measures regional-query performance on
 an existing PACKAGE HDF5 database. It does not rebuild the database; full-build timing
 is recorded separately through the Slurm workflow.
 
-PacBio FIRE co-accessibility validation is available separately through
-`python -m PACKAGE.benchmark.coaccessibility`. It compares legacy and PACKAGE
-`Cov.bed`, object, pair-ranking, and stitched-region outputs. See the parameter
-reference for the full command and output descriptions.
+PacBio FIRE validation compares legacy and PACKAGE `Cov.bed`, object, pair-ranking,
+and stitched-region outputs. These are complementary questions: the ONT benchmarks
+measure storage and query performance, while the PacBio validation measures workflow
+equivalence and explains intentional differences from the legacy implementation.
 
 ## Run the benchmark
 
@@ -197,13 +197,91 @@ individual fibers overlap those promoters.
 
 ### `package_ont_workflow`
 
-This schematic summarizes the current ONT stage of PACKAGE: aligned fiberseq
+This schematic summarizes the ONT branch of PACKAGE: aligned Fiber-seq
 BAM files are processed by `modkit` and `fibertools-rs`, the extracted layers are
 packed into an indexed HDF5 database, and downstream users query or visualize
-single-molecule molecular features. PacBio is intentionally not shown as a
-validated branch yet.
+single-molecule molecular features. It is retained as an ONT-specific schematic;
+the PacBio/FIRE path is documented separately below.
 
 ![PACKAGE ONT workflow](figures/benchmark/package_ont_workflow.png)
+
+## PacBio FIRE Co-Accessibility Validation
+
+Run this comparison after generating PACKAGE `Cov.bed`, object, pair-rank, and
+cluster-rank outputs. The legacy pair table contains both `A -> B` and `B -> A`, so
+the validator first canonicalizes element order and compares one row per biological
+pair.
+
+```bash
+python -m PACKAGE.benchmark.coaccessibility \
+  --legacy-ce /path/to/legacy/ce_rank.txt \
+  --package-ce /path/to/package/ce_rank.txt \
+  --legacy-cluster /path/to/legacy/cluster_rank.txt \
+  --package-cluster /path/to/package/cluster_rank.txt \
+  --legacy-cov /path/to/legacy/Cov.sorted.bed \
+  --package-cov /path/to/package/Cov.sorted.bed \
+  --cov-difference /path/to/Cov.missing_from_PACKAGE.bed \
+  --legacy-object /path/to/legacy/scored_obj.json \
+  --package-object /path/to/package/scored_PACKAGE_obj.json \
+  --outdir benchmark/coaccess_validation
+```
+
+The command writes:
+
+- `validation_summary.json`: pair, cluster, Cov, and object-level metrics;
+- `pair_agreement.csv` and `cluster_agreement.csv`: scores and ranks for shared
+  records;
+- `pair_membership.csv` and `cluster_membership.csv`: shared and method-specific
+  records;
+- `top_k_overlap.csv`: overlap among the strongest `k` constituent pairs; and
+- `coaccess_validation.png/.pdf`: a four-panel validation figure.
+
+The `--threshold 0.10` default is the legacy per-fiber FIRE accessibility cutoff:
+scores below 0.10 are treated as accessible. It is not a p-value, methylation
+threshold, or `Super` cutoff. Pair and cluster `Super` labels are assigned later from
+the elbow of their ranked corrected-score distributions.
+
+### Validated reference result
+
+The current reference dataset produced the following comparison:
+
+| Metric | Result | Interpretation |
+| --- | ---: | --- |
+| Unique constituent pairs | 74,435 legacy; 74,435 PACKAGE; all shared | Exact biological pair membership |
+| Pair score Pearson | 0.990 | Corrected score magnitudes are highly concordant |
+| Pair/rank Spearman | 0.997 | Pair ordering is nearly identical |
+| Pair `Super` agreement | 99.93% | 52 boundary differences among 74,435 pairs |
+| Legacy stitched regions recovered | 15,287/15,287 | No legacy region was lost |
+| Additional PACKAGE regions | 601 | All match the legacy `0.5` sentinel-collision diagnostic |
+| Cluster score Pearson | 0.990 | Shared stitched-region scores are highly concordant |
+| Cluster/rank Spearman | 0.986 | Shared region ordering is strongly concordant |
+| Cov rows | 6,739,056 legacy; 6,739,053 PACKAGE | Three FIRE-only fibers were absent from the HDF5 molecule table |
+| Cov reconstruction | Exact after adding 3 known rows | No unexplained Cov difference remained |
+
+![PacBio FIRE co-accessibility validation](figures/benchmark/coaccess_validation.png)
+
+Read the four panels as follows:
+
+1. **Constituent-pair scores:** points close to the identity line indicate similar
+   distance-corrected scores over several orders of magnitude.
+2. **Constituent-pair ranks:** small rank shifts arise because the legacy distance fit
+   uses directional duplicates while PACKAGE fits unique unordered pairs.
+3. **Top-k pair overlap:** 90% of the top 10 and 95-98% of larger top-k sets are
+   shared, showing that the strongest biological results are stable.
+4. **Shared stitched regions:** most shared region scores lie near identity. The
+   low-score horizontal feature is emphasized by the logarithmic axes and reflects
+   small low-end scoring differences. PACKAGE-only regions are not drawn in this
+   shared-only panel.
+
+The 601 additional PACKAGE regions are not unexplained false positives. The legacy
+cluster code used numeric `0.5` both for a legitimate pair result and as an invalid
+pair sentinel, so valid exact-0.5 cases could be removed. PACKAGE uses an unambiguous
+missing value; all 601 additional regions satisfy the sentinel-collision diagnostic.
+
+For reporting, describe the methods as functionally equivalent at the membership and
+biological-ranking levels, with known implementation corrections. Do not claim exact
+numeric identity for every distance-corrected score. Retain `validation_summary.json`
+and the agreement/membership CSV files with the analysis provenance.
 
 ## Annotation Query Benchmark
 

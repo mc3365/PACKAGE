@@ -26,7 +26,7 @@ nav:
   - Installation: installation.md
   - Tutorial: tutorial.md
   - Parameter Reference: parameters.md
-  - Benchmark: benchmark.md
+  - Benchmark and Validation: benchmark.md
   - API Reference: api.md
 
 markdown_extensions:

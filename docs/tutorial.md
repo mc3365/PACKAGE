@@ -3,6 +3,19 @@
 PACKAGE uses the same HDF5 schema for ONT and PacBio after platform-specific
 extraction outputs have been converted into common intermediate files.
 
+Choose the path that matches your input and analysis goal:
+
+| Starting point | Follow |
+| --- | --- |
+| ONT BAM with MM/ML tags | [ONT workflow](#ont-workflow) |
+| PacBio Fiber-seq BAM | [PacBio workflow](#pacbio-workflow) through HDF5 build/query |
+| PacBio FIRE-annotated BAM | PacBio workflow plus [FIRE co-accessibility](#fire-co-accessibility-inputs) |
+| Existing legacy and PACKAGE FIRE outputs | [Co-accessibility validation](#validate-against-a-legacy-run) |
+
+For a first run, use a small coordinate-sliced BAM and a separate output directory.
+After extraction, inspect the manifest; after build, run `PACKAGE info` and one region
+query before submitting genome-scale analyses.
+
 ## ONT Workflow
 
 ### Prepare the configuration
@@ -334,6 +347,44 @@ constituent element is accessible on a fiber. It also applies the legacy
 distance-correction pass by default. Use `--no-distance-correct` for a simpler
 smoke test.
 
+### Validate against a legacy run
+
+When legacy `Cov.bed`, object, pair-rank, and cluster-rank outputs are available,
+compare the full workflow with the validation benchmark:
+
+```bash
+python -m PACKAGE.benchmark.coaccessibility \
+  --legacy-ce /path/to/legacy/ce_rank.txt \
+  --package-ce /path/to/package/ce_rank.txt \
+  --legacy-cluster /path/to/legacy/cluster_rank.txt \
+  --package-cluster /path/to/package/cluster_rank.txt \
+  --legacy-cov /path/to/legacy/Cov.sorted.bed \
+  --package-cov /path/to/package/Cov.sorted.bed \
+  --cov-difference /path/to/Cov.missing_from_PACKAGE.bed \
+  --legacy-object /path/to/legacy/scored_obj.json \
+  --package-object /path/to/package/scored_PACKAGE_obj.json \
+  --outdir benchmark/coaccess_validation
+```
+
+The comparison canonicalizes legacy directional pair rows (`A -> B` and `B -> A`)
+into one unordered biological pair. It reports exact membership, score and rank
+correlations, top-k overlap, `Super` call agreement, and order-independent
+fingerprints for the large Cov files.
+
+In the validated PacBio dataset, PACKAGE recovered all 74,435 unique constituent
+pairs and every one of 15,287 legacy stitched regions. Pair-score Pearson correlation
+was 0.990, rank Spearman correlation was 0.997, and pair `Super` calls agreed for
+99.93% of pairs. PACKAGE retained 601 additional stitched regions that are all
+candidates for a legacy `0.5` sentinel collision. The PACKAGE Cov file differed by
+three documented fibers; adding those known rows produced an exact multiset match to
+the 6.7-million-row legacy Cov file.
+
+![PacBio FIRE co-accessibility validation](figures/benchmark/coaccess_validation.png)
+
+These results support functional equivalence without claiming that every corrected
+score is numerically identical. See [Benchmark and Validation](benchmark.md#pacbio-fire-co-accessibility-validation)
+for a panel-by-panel explanation and reporting guidance.
+
 ### Current update behavior
 
 HDF5 technically supports append-mode updates, but PACKAGE currently treats a
@@ -562,3 +613,21 @@ python examples/ont_region_plot.py \
 
 Limit single-molecule plots to focused windows and use `--max-fibers` for
 legibility.
+
+## Completion Checklist
+
+A successful current-stage PACKAGE run should leave the following evidence:
+
+- extraction manifests containing BAM QC, tool versions, commands, and output sizes;
+- one HDF5 database containing the expected samples, chromosomes, molecular layers,
+  and annotations;
+- a matching `.index.pkl` sidecar when spatial indexing is enabled;
+- a passing `PACKAGE info` summary and at least one coordinate query;
+- one inspectable visualization, such as an ECDF, centered heatmap/metaplot, or
+  single-molecule regional view; and
+- for PacBio FIRE analyses, `Cov.bed`, the enhancer-by-fiber object, pair and cluster
+  ranking tables, and an optional legacy-validation report.
+
+Keep the YAML configuration, extraction manifests, benchmark metadata, package Git
+commit, and external tool versions with the analysis outputs. Together, they provide
+the provenance needed to reproduce the database and figures.

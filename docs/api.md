@@ -22,9 +22,29 @@ showing how this layout is used for annotation-centered queries.
     options:
       show_source: false
 
-## ONT extraction
+## Extraction
 
 ::: PACKAGE.extract.ont
+    options:
+      show_source: false
+
+::: PACKAGE.extract.pacbio
+    options:
+      show_source: false
+
+## Co-Accessibility
+
+::: PACKAGE.analysis.coaccessibility
+    options:
+      show_source: false
+
+## Benchmarks
+
+::: PACKAGE.benchmark.annotation
+    options:
+      show_source: false
+
+::: PACKAGE.benchmark.coaccessibility
     options:
       show_source: false
 

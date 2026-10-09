@@ -13,11 +13,12 @@ with spatial indexing for genome-scale per-molecule queries.
 
 ## Status
 
-**Alpha (v0.4.0).** ONT extraction, HDF5 building, regional queries, and
-single-molecule visualization have been validated end to end. PacBio Phase 1 support
-normalizes fibertools outputs into the same HDF5 schema for 5mC, 6mA, MSP,
-nucleosomes, and optional FIRE/accessibility calls from `ft fire --extract`. APIs may
-still change.
+**Alpha (v0.4.0).** ONT extraction, HDF5 building, indexed queries, benchmarks, and
+visualization have been validated end to end. PacBio extraction and normalization use
+the same HDF5 schema for 5mC, 6mA, MSPs, nucleosomes, and optional FIRE accessibility
+calls. The PacBio FIRE workflow can regenerate `Cov.bed`, build the enhancer-by-fiber
+object, rank co-accessible pairs and stitched regions, and compare those outputs with
+the legacy workflow. APIs may still change.
 
 ## What it does
 
@@ -33,7 +34,8 @@ integration layer.
 | **Extraction** | `PACKAGE.extract` | Wraps `modkit` and `fibertools-rs` with validated ONT defaults and PacBio normalization |
 | **Storage** | `PACKAGE.db` | HDF5 schema with spatial indexing and memory-mapped access |
 | **Visualization** | `PACKAGE.viz` | Per-molecule heatmap and related plots |
-| **Benchmark** | `PACKAGE.benchmark` | Reproducible scripts for performance and cross-platform figures |
+| **Co-accessibility** | `PACKAGE.analysis.coaccessibility` | PacBio FIRE coverage, object construction, and pair/region ranking |
+| **Benchmark** | `PACKAGE.benchmark` | Query/storage benchmarks and legacy co-accessibility validation |
 
 ## Data Structure
 
@@ -84,7 +86,7 @@ with FiberDatabase("fiber_database.h5") as db:
 
 For PacBio data, use `PACKAGE extract --platform pacbio` with a PacBio config, or
 normalize existing `ft extract` outputs before building the database. See the
-[tutorial](docs/tutorial.md) for the tested PacBio smoke workflow.
+[tutorial](docs/tutorial.md#pacbio-workflow) for the tested end-to-end workflow.
 
 PacBio co-accessibility support starts from a FIRE-annotated BAM or the
 `acc.model.results.bed` generated from it by `ft fire --extract`. The full upstream
@@ -92,30 +94,34 @@ FIRE snakemake/modeling workflow is not bundled; for exact reproduction of legac
 co-accessibility outputs, use the same extracted FIRE BED and fibertools version
 provenance as the original run.
 
-See the [step-by-step ONT workflow](STEP_BY_STEP_GITHUB.md),
-the [parameter reference](docs/parameters.md), and [`examples/`](examples/)
-for complete usage examples.
+Start with the [tutorial](docs/tutorial.md), then use the
+[parameter reference](docs/parameters.md) for every YAML and CLI option. The
+[benchmark and validation guide](docs/benchmark.md) explains outputs and figures,
+and the [step-by-step ONT workflow](STEP_BY_STEP_GITHUB.md) provides a focused ONT
+walkthrough.
 
 ## Supported platforms
 
 - **Oxford Nanopore (ONT)**: validated with `modkit extract` and `ft extract`
 - **PacBio**: validated for fibertools-derived 5mC, 6mA, MSP, nucleosome, and
   optional `ft fire --extract` accessibility-call layers after normalization into the
-  shared HDF5 schema
+  shared HDF5 schema; FIRE co-accessibility coverage, object construction, ranking,
+  and legacy-output validation are also available
 
 The package stores the FIRE/accessibility input layer needed by the legacy
 co-accessibility workflow and can regenerate the legacy `Cov.bed`,
 enhancer-by-fiber JSON object, and ranked constituent-element pair tables from that
-layer. More specialized downstream statistical interpretation remains
-workflow-specific.
+layer. PACKAGE does not run the upstream FIRE model that creates a FIRE-annotated
+BAM. More specialized downstream biological interpretation remains workflow-specific.
 
 ## Design philosophy
 
 `PACKAGE` wraps rather than reimplements established modification callers. The novel
 contribution is the integration layer: joint single-molecule storage, spatial indexing
-across modification types, and the cross-platform abstraction. Analyses are demonstrated
-through example notebooks rather than packaged as a library, leaving users free to
-implement domain-specific analyses against the queryable data structure.
+across modification types, and the cross-platform abstraction. Reusable operations
+such as annotation summaries, single-molecule visualization, and FIRE
+co-accessibility ranking are packaged, while study-specific biological interpretation
+remains downstream.
 
 ## Citation
 

@@ -52,7 +52,9 @@ def single_molecule_heatmap(
 
     Args:
         db: An open FiberDatabase.
-        chrom, start, end: Region to plot.
+        chrom: Chromosome to plot.
+        start: Region start coordinate (0-based).
+        end: Region end coordinate (half-open).
         sample: Sample name; if None, uses the first sample in the db.
         layer: Which modification to color by ('5mC', '6mA', '5hmC').
         max_fibers: Cap number of fibers shown to keep figures legible.

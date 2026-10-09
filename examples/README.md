@@ -8,6 +8,17 @@ Runnable examples demonstrating common workflows.
   and save heatmap/metaplot figures
 - `ont_centered_heatmap.py`: export fixed-window center/TSS matrices and save
   paired heatmap/metaplot figures
+- `ont_benchmark_summary.py`: turn storage, random-query, and annotation-query
+  benchmark tables into summary figures
+
+PacBio FIRE co-accessibility uses the main CLI rather than a separate example script:
+
+```bash
+PACKAGE coaccess cov --help
+PACKAGE coaccess object --help
+PACKAGE coaccess rank --help
+python -m PACKAGE.benchmark.coaccessibility --help
+```
 
 ECDF plots accept `--sample-colors SAMPLE=COLOR`; centered metaplots accept
 `--signal-colors SAMPLE:SIGNAL=COLOR` for exact multi-sample figure palettes.
